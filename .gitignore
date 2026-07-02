@@ -1,0 +1,4 @@
+# Optimization result outputs
+results/
+__pycache__/
+*.pyc
