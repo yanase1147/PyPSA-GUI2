@@ -1,4 +1,20 @@
 import sys
+import os
+from pathlib import Path
+
+# On Windows, register Qt DLL directories for both conda and pip PyQt layouts.
+if sys.platform == "win32":
+    _dll_dirs = [
+        Path(sys.prefix) / "Library" / "bin",  # conda-forge pyqt
+        Path(sys.prefix) / "Lib" / "site-packages" / "PyQt6" / "Qt6" / "bin",  # pip PyQt6 wheels
+    ]
+    _existing = [str(p) for p in _dll_dirs if p.exists()]
+    if _existing:
+        _path_parts = os.environ.get("PATH", "").split(os.pathsep)
+        _path_parts = [p for p in _path_parts if p]
+        os.environ["PATH"] = os.pathsep.join(_existing + _path_parts)
+        for _d in _existing:
+            os.add_dll_directory(_d)
 
 # Fix pandas 3.0 ArrowStringArray / xarray incompatibility
 # (PyPSA optimizer uses xarray which doesn't support Arrow-backed strings yet)
@@ -8,17 +24,21 @@ try:
 except (AttributeError, TypeError):
     pass
 
-import matplotlib
-import matplotlib.font_manager as _fm
+try:
+    import matplotlib
+    import matplotlib.font_manager as _fm
 
-# Set a Japanese-compatible font for matplotlib charts
-_jp_fonts = ["Yu Gothic", "Yu Gothic UI", "Meiryo", "Meiryo UI",
-             "MS Gothic", "MS UI Gothic", "IPAGothic", "Noto Sans CJK JP"]
-_available = {f.name for f in _fm.fontManager.ttflist}
-for _f in _jp_fonts:
-    if _f in _available:
-        matplotlib.rcParams["font.family"] = _f
-        break
+    # Set a Japanese-compatible font for matplotlib charts when available.
+    _jp_fonts = ["Yu Gothic", "Yu Gothic UI", "Meiryo", "Meiryo UI",
+                 "MS Gothic", "MS UI Gothic", "IPAGothic", "Noto Sans CJK JP"]
+    _available = {f.name for f in _fm.fontManager.ttflist}
+    for _f in _jp_fonts:
+        if _f in _available:
+            matplotlib.rcParams["font.family"] = _f
+            break
+except Exception:
+    # Do not block GUI startup if matplotlib is not fully available.
+    pass
 
 from PyQt6.QtWidgets import QApplication, QSplashScreen
 from PyQt6.QtGui import QFont, QFontDatabase, QPixmap, QColor, QPainter
