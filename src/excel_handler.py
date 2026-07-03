@@ -185,7 +185,7 @@ def _write_timeseries_sheets(wb, ts: TimeSeriesData):
         ("hydro_cf",   ts.hydro_cf),
         ("biomass_cf", ts.biomass_cf),
         ("gen_cf",     ts.gen_cf),
-        ("demand_mw",  ts.demand_mw_by_bus),
+        ("demand_mw",  ts.demand_mw),
     ]:
         ws = wb.create_sheet(sheet_name)
         keys = list(data.keys())
@@ -215,6 +215,49 @@ def save_network_with_timeseries(network: NetworkData, ts: TimeSeriesData, filep
     wb.save(filepath)
 
 
+def _migrate_legacy_demand(network: NetworkData, ts: TimeSeriesData) -> None:
+    """旧形式の需要時系列キーを現行の area|load_name 形式へ移行する。
+
+    現行形式のキーは "area|load_name"。過去には以下の2形式が存在した:
+      - "area|bus_carrier"（エリア+バスキャリア単位で複数Loadが共有）
+      - "load_name"（"|" なし。Load名のみで複数エリアが共有）
+    キーの第2要素がそのエリア内の実在するLoad名と一致すればすでに現行形式とみなし、
+    そうでなければ旧形式として該当する全Loadへ値をコピーする
+    （現行形式キーが未設定のLoadのみ、初期値として複製する）。
+    """
+    loads_by_area: dict[str, list] = {}
+    for ld in network.all_loads:
+        loads_by_area.setdefault(ld.area, []).append(ld)
+
+    def _already_current_format(area_name: str, rest: str) -> bool:
+        return any(ld.name == rest for ld in loads_by_area.get(area_name, []))
+
+    # ── "area|bus_carrier" 形式 ──────────────────────────────────────
+    legacy_bus_keys = [
+        k for k in ts.demand_mw
+        if "|" in k and not _already_current_format(*k.split("|", 1))
+    ]
+    for key in legacy_bus_keys:
+        area_name, carrier = key.split("|", 1)
+        carrier = carrier or "AC"
+        values = ts.demand_mw.pop(key)
+        for ld in loads_by_area.get(area_name, []):
+            if ld.bus_carrier == carrier:
+                new_key = TimeSeriesData.make_load_key(ld.area, ld.name)
+                if new_key not in ts.demand_mw:
+                    ts.demand_mw[new_key] = list(values)
+
+    # ── "load_name" のみ（"|" なし）の形式 ───────────────────────────
+    legacy_name_keys = [k for k in ts.demand_mw if "|" not in k]
+    for key in legacy_name_keys:
+        values = ts.demand_mw.pop(key)
+        for ld in network.all_loads:
+            if ld.name == key:
+                new_key = TimeSeriesData.make_load_key(ld.area, ld.name)
+                if new_key not in ts.demand_mw:
+                    ts.demand_mw[new_key] = list(values)
+
+
 def load_network_with_timeseries(filepath: str) -> tuple:
     """Load network + timeseries from a combined Excel file.
 
@@ -222,6 +265,7 @@ def load_network_with_timeseries(filepath: str) -> tuple:
     """
     network = load_network(filepath)
     ts      = load_timeseries(filepath)
+    _migrate_legacy_demand(network, ts)
     return network, ts
 
 
@@ -669,11 +713,7 @@ def load_timeseries(filepath: str) -> TimeSeriesData:
     ts.hydro_cf         = _load_sheet("hydro_cf")
     ts.biomass_cf       = _load_sheet("biomass_cf")
     ts.gen_cf           = _load_sheet("gen_cf")
-    legacy_demand       = _load_sheet("demand_mw")
-    ts.demand_mw_by_bus = {
-        key if "|" in key else TimeSeriesData.make_bus_key(key, "AC"): values
-        for key, values in legacy_demand.items()
-    }
+    ts.demand_mw        = _load_sheet("demand_mw")
 
     # ── ts_mode (CF/MW per generator) ──────────────────────────────
     if "ts_mode" in wb.sheetnames:

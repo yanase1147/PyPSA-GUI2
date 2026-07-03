@@ -403,7 +403,7 @@ class TimeSeriesEditor(QWidget):
         self.wind_tab    = _SeriesTab(self.tr("風力 CF"),      self.tr("設備利用率 (-)"), 1.0, selector_label=self.tr("発電設備選択"), mode_toggle=True)
         self.hydro_tab   = _SeriesTab(self.tr("水力 CF"),      self.tr("設備利用率 (-)"), 1.0, selector_label=self.tr("発電設備選択"), mode_toggle=True)
         self.biomass_tab = _SeriesTab(self.tr("バイオマス CF"), self.tr("設備利用率 (-)"), 1.0, selector_label=self.tr("発電設備選択"), mode_toggle=True)
-        self.demand_tab  = _SeriesTab(self.tr("需要"),          self.tr("需要 (MW)"),     1e9)
+        self.demand_tab  = _SeriesTab(self.tr("需要"),          self.tr("需要 (MW)"),     1e9, selector_label=self.tr("負荷選択"))
         self.tabs.addTab(self.solar_tab,   self.tr("太陽光 CF"))
         self.tabs.addTab(self.wind_tab,    self.tr("風力 CF"))
         self.tabs.addTab(self.hydro_tab,   self.tr("水力 CF"))
@@ -419,14 +419,7 @@ class TimeSeriesEditor(QWidget):
                         if g.carrier in ("Wind", "Wave and Tidal")]
         hydro_gens   = [g for g in network.all_generators if g.carrier == "Hydro"]
         biomass_gens = [g for g in network.all_generators if g.carrier == "Biomass"]
-        demand_keys  = {
-            TimeSeriesData.make_bus_key(a.name, "AC") for a in network.areas
-        }
-        demand_keys.update(
-            TimeSeriesData.make_bus_key(ld.area, ld.bus_carrier)
-            for ld in network.all_loads
-        )
-        demand_keys = sorted(demand_keys)
+        demand_keys  = sorted(TimeSeriesData.make_load_key(ld.area, ld.name) for ld in network.all_loads)
 
         self.solar_tab.set_keys([g.name for g in solar_gens])
         self.wind_tab.set_keys([g.name for g in wind_gens])
@@ -469,7 +462,7 @@ class TimeSeriesEditor(QWidget):
             wind_cf      = self.wind_tab.get_data(),
             hydro_cf     = self.hydro_tab.get_data(),
             biomass_cf   = self.biomass_tab.get_data(),
-            demand_mw_by_bus = self.demand_tab.get_data(),
+            demand_mw    = self.demand_tab.get_data(),
             ts_mode      = ts_mode,
             fixed_output = fixed_output,
         )
@@ -479,7 +472,7 @@ class TimeSeriesEditor(QWidget):
         self.wind_tab.set_data(ts.wind_cf)
         self.hydro_tab.set_data(ts.hydro_cf)
         self.biomass_tab.set_data(ts.biomass_cf)
-        self.demand_tab.set_data(ts.demand_mw_by_bus)
+        self.demand_tab.set_data(ts.demand_mw)
         for tab in (self.solar_tab, self.wind_tab, self.hydro_tab, self.biomass_tab):
             tab.set_mode(ts.ts_mode)
             tab.set_fixed_output(ts.fixed_output)

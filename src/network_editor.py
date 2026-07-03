@@ -20,7 +20,7 @@ from PyQt6.QtGui import QFont, QBrush, QPen, QColor, QPolygonF, QPainter
 
 from .models import (
     NetworkData, Area, AreaRES, Generator, Interconnection, Load, Store, PumpedHydro,
-    Converter, CustomComponentInstance,
+    Converter, CustomComponentInstance, TimeSeriesData,
     CARRIERS, AREA_CARRIERS, CONVERTER_PRESETS, AVAILABLE_EXPOSED_PARAMS,
 )
 from .map_bridge import MapBridge
@@ -1615,9 +1615,13 @@ class NetworkEditor(QWidget):
 
         elif kind == "load":
             orig = next((l for l in res.loads if l.name == name), None)
+            ts_vals = []
+            if self._timeseries_editor is not None and orig is not None:
+                ts_vals = self._timeseries_editor.get_timeseries().get_demand_for_load(res.area.name, name)
             dlg = LoadDialog(self.network.areas, self._res_window,
                              existing=orig, preset_area=res.area.name,
-                             area_carriers=self._area_carriers())
+                             area_carriers=self._area_carriers(),
+                             ts_values=ts_vals)
             if dlg.exec() != QDialog.DialogCode.Accepted:
                 return
             new_obj = dlg.get_load()
@@ -1625,6 +1629,8 @@ class NetworkEditor(QWidget):
                 for i, l in enumerate(r.loads):
                     if l.name == name:
                         r.loads[i] = new_obj; break
+            self._write_back_load_ts(dlg, new_obj.area, new_obj.name,
+                                     old_area=res.area.name, old_name=name)
 
         elif kind == "store":
             orig = next((s for s in res.stores if s.name == name), None)
@@ -1935,6 +1941,20 @@ class NetworkEditor(QWidget):
             ts.fixed_output[gen_name] = dlg.get_ts_fixed()
         self._timeseries_editor.load_timeseries(ts)
 
+    def _write_back_load_ts(self, dlg: "LoadDialog", area: str, load_name: str,
+                            old_area: str = None, old_name: str = None) -> None:
+        """需要TS値を TimeSeriesEditor に書き戻す。"""
+        if self._timeseries_editor is None:
+            return
+        ts = self._timeseries_editor.get_timeseries()
+        # エリア・名前変更時は旧エントリを削除
+        if old_name and (old_area != area or old_name != load_name):
+            ts.demand_mw.pop(TimeSeriesData.make_load_key(old_area, old_name), None)
+        vals = dlg.get_ts_values()
+        if any(v != 0.0 for v in vals):
+            ts.set_demand_for_load(area, load_name, vals)
+        self._timeseries_editor.load_timeseries(ts)
+
     def _add_load_dialog(self):
         if not self._current_res:
             return
@@ -1945,6 +1965,7 @@ class NetworkEditor(QWidget):
             ld = dlg.get_load()
             res = self.network.get_area_res(ld.area) or self._current_res
             res.loads.append(ld)
+            self._write_back_load_ts(dlg, ld.area, ld.name)
             self._refresh_res_tables()
             self.network_changed.emit(self.network)
 
@@ -1953,10 +1974,15 @@ class NetworkEditor(QWidget):
         if row < 0:
             QMessageBox.information(self._res_window, self.tr("情報"), self.tr("編集する負荷を選択してください。")); return
         old_name = self.load_table.item(row, 0).text()
+        old_area = self._current_res.area.name if self._current_res else None
         orig = next((l for l in (self._current_res.loads if self._current_res else []) if l.name == old_name), None)
+        ts_vals = []
+        if self._timeseries_editor is not None and orig is not None:
+            ts_vals = self._timeseries_editor.get_timeseries().get_demand_for_load(old_area, old_name)
         dlg = LoadDialog(self.network.areas, self._res_window, existing=orig,
-                         preset_area=self._current_res.area.name if self._current_res else None,
-                         area_carriers=self._area_carriers())
+                         preset_area=old_area,
+                         area_carriers=self._area_carriers(),
+                         ts_values=ts_vals)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         new_ld = dlg.get_load()
@@ -1964,6 +1990,7 @@ class NetworkEditor(QWidget):
             for i, l in enumerate(res.loads):
                 if l.name == old_name:
                     res.loads[i] = new_ld; break
+        self._write_back_load_ts(dlg, new_ld.area, new_ld.name, old_area=old_area, old_name=old_name)
         self._refresh_res_tables()
         self.network_changed.emit(self.network)
 
@@ -2297,6 +2324,40 @@ class _GenTsDialog(QDialog):
         return fo.get(self._gen_name, False)
 
 
+class _LoadTsDialog(QDialog):
+    """時系列データ（需要 p_set）を負荷単位で編集するサブダイアログ。"""
+
+    def __init__(self, load_name: str, values: list, parent=None):
+        from .timeseries_editor import _SeriesTab
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("時系列データ編集: {}").format(load_name))
+        self.resize(1000, 640)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+
+        self._load_name = load_name
+        self._tab = _SeriesTab(
+            self.tr("需要"),
+            self.tr("需要 (MW)"),
+            y_max=1e9,
+            selector_label=self.tr("負荷"),
+        )
+        self._tab.set_keys([load_name])
+        if values and len(values) == 8760:
+            self._tab.set_data({load_name: list(values)})
+        self._tab.bus_combo.setCurrentText(load_name)
+        layout.addWidget(self._tab)
+
+        btns = QDialogButtonBox(_OK_CANCEL)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def get_values(self) -> list:
+        data = self._tab.get_data()
+        return data.get(self._load_name, [0.0] * 8760)
+
+
 class _FormDialog(QDialog):
     def __init__(self, title, parent=None):
         super().__init__(parent)
@@ -2522,19 +2583,24 @@ class LoadDialog(_FormDialog):
 
     def __init__(self, areas, parent=None, existing: Load = None,
                  preset_area: str = None,
-                 area_carriers: list[str] = None):
+                 area_carriers: list[str] = None,
+                 ts_values: list = None):
         title = "負荷の編集" if existing else "負荷の追加"
         super().__init__(title, parent)
         self.setWindowTitle(self.tr("負荷の編集") if existing else self.tr("負荷の追加"))
         if not existing:
             LoadDialog._counter += 1
         default_name = f"Load{LoadDialog._counter}" if not existing else existing.name
+        self._ts_values: list = list(ts_values) if ts_values else [0.0] * 8760
         self.name_edit  = QLineEdit(default_name)
         self.area_combo = QComboBox(); self.area_combo.addItems([a.name for a in areas])
         self.bus_carrier_combo = QComboBox(); self.bus_carrier_combo.addItems(area_carriers or list(AREA_CARRIERS))
         self.p_set      = self._dspin(0, 1e9, 100.0, suffix=" MW")
+        self.btn_ts_edit = QPushButton(self.tr("時系列を編集…"))
+        self.btn_ts_edit.clicked.connect(self._open_ts_dialog)
         for lbl, w in [(self.tr("名前:"), self.name_edit), (self.tr("エリア:"), self.area_combo),
-                (self.tr("バスキャリア:"), self.bus_carrier_combo), (self.tr("需要:"), self.p_set)]:
+                (self.tr("バスキャリア:"), self.bus_carrier_combo), (self.tr("需要:"), self.p_set),
+                (self.tr("時系列データ:"), self.btn_ts_edit)]:
             self._layout.addRow(lbl, w)
         self._add_buttons()
         if preset_area and preset_area in [a.name for a in areas]:
@@ -2550,6 +2616,15 @@ class LoadDialog(_FormDialog):
                     area=self.area_combo.currentText(),
                     bus_carrier=self.bus_carrier_combo.currentText(),
                     p_set=self.p_set.value())
+
+    def _open_ts_dialog(self):
+        load_name = self.name_edit.text() or "Load"
+        dlg = _LoadTsDialog(load_name, self._ts_values, parent=self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._ts_values = dlg.get_values()
+
+    def get_ts_values(self) -> list:
+        return self._ts_values
 
 
 class StoreDialog(_FormDialog):

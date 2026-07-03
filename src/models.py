@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional
 
 CARRIERS = [
     "Coal", "Gas", "Oil", "Hydro", "Nuclear", "Solar", "Wind",
@@ -460,7 +460,8 @@ class TimeSeriesData:
     hydro_cf[gen_name]   : capacity factor 0-1 OR raw MW output (Hydro generators)
     biomass_cf[gen_name] : capacity factor 0-1 OR raw MW output (Biomass generators)
     gen_cf[gen_name]     : capacity factor 0-1 for any other generator carrier
-    demand_mw_by_bus[area|carrier] : demand in MW (Load components)
+    demand_mw[area|load_name] : demand in MW (Load components); keyed by area
+        so that loads with the same name in different areas stay independent.
     ts_mode[gen_name]    : "cf" (default) or "mw" — input mode per generator
     fixed_output[gen_name]: True → p_min_pu = p_max_pu (forced dispatch)
     """
@@ -469,7 +470,7 @@ class TimeSeriesData:
     hydro_cf:     Dict[str, List[float]] = field(default_factory=dict)
     biomass_cf:   Dict[str, List[float]] = field(default_factory=dict)
     gen_cf:       Dict[str, List[float]] = field(default_factory=dict)
-    demand_mw_by_bus: Dict[str, List[float]] = field(default_factory=dict)
+    demand_mw:    Dict[str, List[float]] = field(default_factory=dict)
     ts_mode:      Dict[str, str]         = field(default_factory=dict)
     fixed_output: Dict[str, bool]        = field(default_factory=dict)
 
@@ -493,43 +494,21 @@ class TimeSeriesData:
         self.cf_for_carrier(carrier)[gen_name] = values
 
     @staticmethod
-    def make_bus_key(area_name: str, carrier: str = "AC") -> str:
-        return f"{area_name}|{carrier or 'AC'}"
+    def make_load_key(area_name: str, load_name: str) -> str:
+        return f"{area_name}|{load_name}"
 
-    @staticmethod
-    def parse_bus_key(bus_key: str) -> Tuple[str, str]:
-        if "|" not in bus_key:
-            return bus_key, "AC"
-        area_name, carrier = bus_key.split("|", 1)
-        return area_name, carrier or "AC"
+    def get_demand_for_load(self, area_name: str, load_name: str) -> List[float]:
+        """Return the demand timeseries for a load (empty list if not set)."""
+        return self.demand_mw.get(self.make_load_key(area_name, load_name), [])
 
-    @property
-    def demand_mw(self) -> Dict[str, List[float]]:
-        """Backward-compatible AC-only view of demand time series."""
-        result: Dict[str, List[float]] = {}
-        for bus_key, values in self.demand_mw_by_bus.items():
-            area_name, carrier = self.parse_bus_key(bus_key)
-            if carrier == "AC":
-                result[area_name] = values
-        return result
+    def set_demand_for_load(self, area_name: str, load_name: str, values: List[float]) -> None:
+        """Write demand timeseries for a load."""
+        self.demand_mw[self.make_load_key(area_name, load_name)] = values
 
-    @demand_mw.setter
-    def demand_mw(self, value: Dict[str, List[float]]) -> None:
-        self.demand_mw_by_bus = {
-            self.make_bus_key(area_name, "AC"): series
-            for area_name, series in value.items()
-        }
-
-    def ensure_bus(self, area_name: str, carrier: str = "AC", n_hours: int = 8760) -> None:
-        bus_key = self.make_bus_key(area_name, carrier)
-        if bus_key not in self.demand_mw_by_bus:
-            self.demand_mw_by_bus[bus_key] = [0.0] * n_hours
-
-    def get_demand(self, area_name: str, carrier: str = "AC") -> List[float]:
-        return self.demand_mw_by_bus.get(self.make_bus_key(area_name, carrier), [])
-
-    def set_demand(self, area_name: str, carrier: str, values: List[float]) -> None:
-        self.demand_mw_by_bus[self.make_bus_key(area_name, carrier)] = values
+    def ensure_load_demand(self, area_name: str, load_name: str, n_hours: int = 8760) -> None:
+        key = self.make_load_key(area_name, load_name)
+        if key not in self.demand_mw:
+            self.demand_mw[key] = [0.0] * n_hours
 
     def ensure_generator(self, gen_name: str, carrier: str, n_hours: int = 8760) -> None:
         cf_dict = self.cf_for_carrier(carrier)

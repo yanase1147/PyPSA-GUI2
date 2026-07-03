@@ -391,7 +391,7 @@ def build_network(
         if load.area not in area_names:
             continue
         bus = _bus_name(load.area, load.bus_carrier)
-        demand_raw = ts.get_demand(load.area, load.bus_carrier) or [load.p_set] * N_HOURS
+        demand_raw = ts.get_demand_for_load(load.area, load.name) or [load.p_set] * N_HOURS
         # Generate unique name if needed (allows same names in different areas)
         load_name_unique = _unique_component_name(n, "Load", load.name, scope_hint=load.area)
         n.add("Load", load_name_unique, bus=bus,
