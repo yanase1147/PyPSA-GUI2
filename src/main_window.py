@@ -39,9 +39,10 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(self.network_editor,    self.tr("ネットワーク"))
         self.tabs.addTab(self.scenario_editor,   self.tr("シナリオ"))
-        self.tabs.addTab(self.timeseries_editor, self.tr("時系列データ"))
         self.tabs.addTab(self.run_panel,         "RUN")
         self.tabs.addTab(self.results_panel,     self.tr("結果"))
+        # 時系列データタブはUI簡素化のため非表示。ウィジェット自体は
+        # RES画面の時系列編集ダイアログや保存/読込のデータストアとして使い続ける。
 
         # Sync buses to time series editor when network changes
         self.network_editor.network_changed.connect(self._on_network_changed)
