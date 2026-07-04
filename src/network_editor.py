@@ -26,6 +26,7 @@ from .models import (
 from .map_bridge import MapBridge
 from .network_manager import NetworkManagerWindow
 from .component_template_editor import ComponentTemplateEditorDialog, CustomInstanceDialog
+from .unit_widgets import UnitValueBox
 
 
 def _fmt(v) -> str:
@@ -2372,7 +2373,9 @@ class _FormDialog(QDialog):
         self._layout.addRow(bb)
 
     @staticmethod
-    def _dspin(lo=0.0, hi=1e9, val=0.0, step=None, decimals=2, suffix=""):
+    def _dspin(lo=0.0, hi=1e9, val=0.0, step=None, decimals=2, suffix="", unit_family=None):
+        if unit_family:
+            return UnitValueBox(unit_family, lo=lo, hi=hi, val=val, step=step, decimals=decimals)
         s = _AdaptiveSpinBox()
         s.setRange(lo, hi); s.setValue(val); s.setDecimals(decimals)
         if step is not None: s.setSingleStep(step)
@@ -2423,9 +2426,9 @@ class GeneratorDialog(_FormDialog):
         self.area_combo    = QComboBox(); self.area_combo.addItems([a.name for a in areas])
         self.carrier_combo = QComboBox(); self.carrier_combo.addItems(generator_carriers or list(CARRIERS))
         self.bus_carrier_combo = QComboBox(); self.bus_carrier_combo.addItems(area_carriers or list(AREA_CARRIERS))
-        self.p_nom         = self._dspin(0, 1e9, 100.0, suffix=" MW")
+        self.p_nom         = self._dspin(0, 1e9, 100.0, unit_family="power")
         self.ext_chk       = QCheckBox()
-        self.p_max         = self._dspin(0, 1e9, 0.0, suffix=" MW")
+        self.p_max         = self._dspin(0, 1e9, 0.0, unit_family="power")
         self.mc            = self._dspin(0, 1e6, 0.0, suffix=f" {cur}/MWh")
         self.cc            = self._dspin(0, 1e9, 0.0, suffix=f" {cur}/MW")
         self.eff           = self._dspin(0.01, 1.0, 0.4, step=0.01, decimals=3)
@@ -2534,8 +2537,8 @@ class InterconnectionDialog(_FormDialog):
             self.a1_combo.setCurrentIndex(1)
         self.carrier_combo = QComboBox(); self.carrier_combo.addItems([""] + (area_carriers or list(AREA_CARRIERS)))
         self.eff  = self._dspin(0.01, 1.0, 1.0, step=0.01, decimals=3)
-        self.pnom = self._dspin(0, 1e9, 1000.0, suffix=" MW")
-        self.prev = self._dspin(0, 1e9, 0.0, suffix=" MW")
+        self.pnom = self._dspin(0, 1e9, 1000.0, unit_family="power")
+        self.prev = self._dspin(0, 1e9, 0.0, unit_family="power")
         self.ext  = QCheckBox()
         self.cc   = self._dspin(0, 1e9, 0.0, suffix=f" {cur}/MW")
         self.mc   = self._dspin(0, 1e6, 0.0, suffix=f" {cur}/MWh")
@@ -2595,7 +2598,7 @@ class LoadDialog(_FormDialog):
         self.name_edit  = QLineEdit(default_name)
         self.area_combo = QComboBox(); self.area_combo.addItems([a.name for a in areas])
         self.bus_carrier_combo = QComboBox(); self.bus_carrier_combo.addItems(area_carriers or list(AREA_CARRIERS))
-        self.p_set      = self._dspin(0, 1e9, 100.0, suffix=" MW")
+        self.p_set      = self._dspin(0, 1e9, 100.0, unit_family="power")
         self.btn_ts_edit = QPushButton(self.tr("時系列を編集…"))
         self.btn_ts_edit.clicked.connect(self._open_ts_dialog)
         for lbl, w in [(self.tr("名前:"), self.name_edit), (self.tr("エリア:"), self.area_combo),
@@ -2641,7 +2644,7 @@ class StoreDialog(_FormDialog):
         default_name = f"Store{StoreDialog._counter}" if not existing else existing.name
         self.name_edit    = QLineEdit(default_name)
         self.area_combo   = QComboBox(); self.area_combo.addItems([a.name for a in areas])
-        self.e_nom        = self._dspin(0, 1e12, 0.0, suffix=" MWh")
+        self.e_nom        = self._dspin(0, 1e12, 0.0, unit_family="energy")
         self.carrier_edit = QComboBox()
         self.carrier_edit.setEditable(True)
         self.carrier_edit.addItems([""] + (area_carriers or list(AREA_CARRIERS)))
@@ -2679,11 +2682,11 @@ class PumpedHydroDialog(_FormDialog):
         default_name = f"PumpedHydro{PumpedHydroDialog._counter}" if not existing else existing.name
         self.name_edit   = QLineEdit(default_name)
         self.area_combo  = QComboBox(); self.area_combo.addItems([a.name for a in areas])
-        self.p_turbine   = self._dspin(0, 1e9, 100.0, suffix=" MW")
+        self.p_turbine   = self._dspin(0, 1e9, 100.0, unit_family="power")
         self.eff_turbine = self._dspin(0.01, 1.0, 0.9, step=0.01, decimals=3)
-        self.p_pump      = self._dspin(0, 1e9, 100.0, suffix=" MW")
+        self.p_pump      = self._dspin(0, 1e9, 100.0, unit_family="power")
         self.eff_pump    = self._dspin(0.01, 1.0, 0.85, step=0.01, decimals=3)
-        self.e_nom       = self._dspin(0, 1e12, 0.0, suffix=" MWh")
+        self.e_nom       = self._dspin(0, 1e12, 0.0, unit_family="energy")
         self.ext_chk     = QCheckBox()
         self.cc          = self._dspin(0, 1e9, 0.0, suffix=f" {cur}/MW")
         self.mc          = self._dspin(0, 1e6, 0.0, suffix=f" {cur}/MWh")
@@ -2754,9 +2757,9 @@ class ConverterDialog(_FormDialog):
         self.carrier_out2_combo.addItems(["(なし)"] + carriers)
         self.eff   = self._dspin(0.01, 1.0, 0.9, step=0.01, decimals=3)
         self.eff2  = self._dspin(0.0,  1.0, 0.0, step=0.01, decimals=3)
-        self.p_nom = self._dspin(0, 1e9, 100.0, suffix=" MW")
+        self.p_nom = self._dspin(0, 1e9, 100.0, unit_family="power")
         self.ext_chk = QCheckBox()
-        self.p_max = self._dspin(0, 1e9, 0.0, suffix=" MW")
+        self.p_max = self._dspin(0, 1e9, 0.0, unit_family="power")
         self.mc    = self._dspin(0, 1e6, 0.0, suffix=f" {cur}/MWh")
         self.cc    = self._dspin(0, 1e9, 0.0, suffix=f" {cur}/MW")
         self.yr    = self._ispin(val=2020)
