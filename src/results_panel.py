@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from .models import OptimizationResults, YearResult, CARRIER_COLORS, CF_CARRIERS
-from .pypsa_runner import extract_year_results, extract_year_timeseries
+from .pypsa_runner import extract_year_results, extract_year_timeseries, _extract_multi_period_year
 
 
 class _SummaryWindow(QWidget):
@@ -303,12 +303,17 @@ class ResultsPanel(QWidget):
           result_2024.nc              -> ("ベースライン", 2024)
           result_Scenario1_2030.nc    -> ("Scenario1", 2030)
           result_Scenario1_2030_太陽光２倍.nc -> ("Scenario1", 2030)
+          result_Scenario1_mp_2030-2040-2050_step24.nc -> ("Scenario1", 0)
         """
         stem = re.sub(r"\.nc$", "", basename, flags=re.IGNORECASE)
         if stem.startswith("result_"):
             rest = stem[len("result_"):]
         else:
             rest = stem
+        # multi-period: <name>_mp_<years>_...
+        m_mp = re.match(r"(.+?)_mp_(\d{4}(?:-\d{4})*)", rest)
+        if m_mp:
+            return m_mp.group(1), 0
         # ベースライン: 先頭が数字
         if rest and rest[0].isdigit():
             m = re.search(r"(\d{4})", rest)
@@ -355,10 +360,7 @@ class ResultsPanel(QWidget):
             results = OptimizationResults(scenario_name=scenario_name)
             for path, year in file_list:
                 basename = os.path.basename(path)
-                yr = YearResult(year=year)
                 try:
-                    # Windows: netCDF4 C ライブラリが非ASCII パスを扱えない場合があるため
-                    # ASCII 名の一時ファイル経由で読み込む
                     tmp_fd, tmp_path = tempfile.mkstemp(suffix='.nc')
                     os.close(tmp_fd)
                     try:
@@ -369,18 +371,43 @@ class ResultsPanel(QWidget):
                             os.unlink(tmp_path)
                         except OSError:
                             pass
-                    yr.status = "ok"
-                    yr.snapshot_step = max(1, 8760 // max(1, len(n.snapshots)))
-                    try:
-                        yr.objective = float(n.objective)
-                    except Exception:
-                        yr.objective = 0.0
-                    extract_year_results(n, yr)
-                    extract_year_timeseries(n, yr)
+
+                    import pandas as pd
+                    is_multi = (hasattr(n, "investment_periods")
+                                and n.investment_periods is not None
+                                and len(n.investment_periods) > 1)
+
+                    if is_multi:
+                        periods = sorted(n.investment_periods)
+                        n_snaps_per_period = len(n.snapshots) // len(periods) if len(periods) else 1
+                        step = max(1, 8760 // max(1, n_snaps_per_period))
+                        obj = 0.0
+                        try:
+                            obj = float(n.objective)
+                        except Exception:
+                            pass
+                        for period in periods:
+                            yr = YearResult(year=int(period), snapshot_step=step)
+                            yr.status = "ok"
+                            yr.objective = obj / len(periods)
+                            _extract_multi_period_year(n, yr, int(period))
+                            results.year_results.append(yr)
+                    else:
+                        yr = YearResult(year=year)
+                        yr.status = "ok"
+                        yr.snapshot_step = max(1, 8760 // max(1, len(n.snapshots)))
+                        try:
+                            yr.objective = float(n.objective)
+                        except Exception:
+                            yr.objective = 0.0
+                        extract_year_results(n, yr)
+                        extract_year_timeseries(n, yr)
+                        results.year_results.append(yr)
                 except Exception:
+                    yr = YearResult(year=year)
                     yr.status = "error"
                     all_errors.append(f"{basename}:\n{traceback.format_exc()}")
-                results.year_results.append(yr)
+                    results.year_results.append(yr)
             results.year_results.sort(key=lambda r: r.year)
             all_scenarios[scenario_name] = results
 

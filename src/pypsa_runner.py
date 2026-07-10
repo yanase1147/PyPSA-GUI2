@@ -119,11 +119,17 @@ class OptimizationWorker(QThread):
                 "simplex_crash_strategy": 9,
             }
             with redirect_stdout(buf), redirect_stderr(buf):
-                status, cond = n.optimize(
-                    solver_name=self._solver,
-                    solver_options=solver_opts,
-                    multi_investment_periods=True,
-                )
+                try:
+                    status, cond = n.optimize(
+                        solver_name=self._solver,
+                        solver_options=solver_opts,
+                        multi_investment_periods=True,
+                    )
+                except TypeError:
+                    status, cond = n.optimize(
+                        solver_name=self._solver,
+                        solver_options=solver_opts,
+                    )
 
             status_str = str(status) if status else "unknown"
             self._emit_log(f"ステータス: {status_str}  条件: {cond}")
