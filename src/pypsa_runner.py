@@ -18,7 +18,7 @@ _TQDM_RE = re.compile(r'.*\d+%\|')
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from .models import NetworkData, ScenarioData, TimeSeriesData, OptimizationResults, YearResult, CF_CARRIERS, ScenarioProfile
-from .config_generator import build_network
+from .config_generator import build_network, build_multi_period_network
 
 
 class OptimizationWorker(QThread):
@@ -65,21 +65,155 @@ class OptimizationWorker(QThread):
         results = OptimizationResults(scenario_name=self._scenario.name)
         full_log: list[str] = []
 
-        for year in self._years:
-            if self._stop:
-                self._emit_log("--- ユーザーによって停止されました ---")
-                break
+        if self._scenario.multi_period and len(self._years) >= 2:
+            self._run_multi_period(results, full_log)
+        else:
+            for year in self._years:
+                if self._stop:
+                    self._emit_log("--- ユーザーによって停止されました ---")
+                    break
 
-            self._emit_log(f"\n{'='*60}")
-            self._emit_log(f"  計画年 {year} の最適化を開始します")
-            self._emit_log(f"{'='*60}")
+                self._emit_log(f"\n{'='*60}")
+                self._emit_log(f"  計画年 {year} の最適化を開始します")
+                self._emit_log(f"{'='*60}")
 
-            yr = self._run_year(year, full_log)
-            results.year_results.append(yr)
-            self.year_done.emit(year, yr)
+                yr = self._run_year(year, full_log)
+                results.year_results.append(yr)
+                self.year_done.emit(year, yr)
 
         results.log = "\n".join(full_log)
         self.finished.emit(results)
+
+    # ------------------------------------------------------------------
+    def _run_multi_period(self, results: OptimizationResults, full_log: list[str]):
+        """Run perfect-foresight multi-period optimization in a single solve."""
+        buf = _LogBuffer(self._emit_log, full_log)
+        log_handler = _QtLogHandler(self._emit_log, full_log)
+        log_handler.setFormatter(logging.Formatter("%(name)s - %(levelname)s - %(message)s"))
+
+        _target_loggers = [logging.getLogger(n) for n in ("pypsa", "linopy")]
+        for lg in _target_loggers:
+            lg.addHandler(log_handler)
+            if lg.level == logging.NOTSET or lg.level > logging.DEBUG:
+                lg.setLevel(logging.DEBUG)
+
+        try:
+            years_str = ", ".join(str(y) for y in self._years)
+            self._emit_log(f"\n{'='*60}")
+            self._emit_log(f"  完全予見 容量拡張最適化")
+            self._emit_log(f"  投資期間: {years_str}")
+            self._emit_log(f"{'='*60}")
+
+            self._emit_log("ネットワークを構築中（multi-period）…")
+            n = build_multi_period_network(
+                self._network, self._scenario, self._timeseries,
+                self._years,
+                active_profiles=self._active_profiles,
+                solver_name=self._solver,
+                snapshot_step=self._snapshot_step,
+            )
+
+            self._emit_log(f"ソルバー: {self._solver}  最適化開始…")
+            solver_opts = {
+                "simplex_scale_strategy": 2,
+                "simplex_crash_strategy": 9,
+            }
+            with redirect_stdout(buf), redirect_stderr(buf):
+                status, cond = n.optimize(
+                    solver_name=self._solver,
+                    solver_options=solver_opts,
+                    multi_investment_periods=True,
+                )
+
+            status_str = str(status) if status else "unknown"
+            self._emit_log(f"ステータス: {status_str}  条件: {cond}")
+
+            if status_str in ("ok", "optimal", "feasible"):
+                obj = float(n.objective) if hasattr(n, "objective") else 0.0
+                self._emit_log(f"目的関数値（全期間合計）: {obj:,.0f} Currency")
+
+                for year in self._years:
+                    yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step))
+                    yr.status = status_str
+                    yr.objective = obj / len(self._years)
+                    _extract_multi_period_year(n, yr, year)
+                    results.year_results.append(yr)
+                    self.year_done.emit(year, yr)
+                    self._emit_log(
+                        f"[{year}] 容量抽出完了  CO₂={yr.co2_emissions:,.0f} tCO₂")
+
+                self._save_netcdf_multi(n)
+            else:
+                self._emit_log(f"最適化失敗: {status_str}")
+                for year in self._years:
+                    yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step))
+                    yr.status = status_str
+                    results.year_results.append(yr)
+                    self.year_done.emit(year, yr)
+
+        except MemoryError:
+            tb = traceback.format_exc()
+            step = max(1, self._snapshot_step)
+            msg = (
+                f"メモリ不足エラー (MemoryError)\n"
+                f"  multi-period は単年度より大幅にメモリを消費します。\n"
+                f"  現在の snapshot_step = {step}\n"
+                f"  対策: スナップショット間隔を大きくしてください（例: 24〜168）。\n"
+                f"  詳細:\n{tb}"
+            )
+            self._emit_log(msg)
+            full_log.append(msg)
+            for year in self._years:
+                yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step))
+                yr.status = "error"
+                results.year_results.append(yr)
+                self.year_done.emit(year, yr)
+
+        except Exception:
+            tb = traceback.format_exc()
+            self._emit_log(f"エラー:\n{tb}")
+            full_log.append(tb)
+            for year in self._years:
+                yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step))
+                yr.status = "error"
+                results.year_results.append(yr)
+                self.year_done.emit(year, yr)
+
+        finally:
+            for lg in _target_loggers:
+                lg.removeHandler(log_handler)
+
+    # ------------------------------------------------------------------
+    def _save_netcdf_multi(self, n):
+        if not self._output_dir:
+            return
+        try:
+            os.makedirs(self._output_dir, exist_ok=True)
+            import re as _re
+            def sanitize(s: str) -> str:
+                return _re.sub(r'[\\/:*?"<>|]', '_', s).strip('_ ') or "unnamed"
+            step_part = f"step{max(1, int(self._snapshot_step))}"
+            years_part = "-".join(str(y) for y in self._years)
+            parts = ["result", sanitize(self._scenario.name), f"mp_{years_part}", step_part]
+            for p in self._active_profiles:
+                parts.append(sanitize(p.name))
+            filename = "_".join(parts) + ".nc"
+            final_path = os.path.join(self._output_dir, filename)
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix='.nc', dir=self._output_dir)
+            os.close(tmp_fd)
+            try:
+                n.export_to_netcdf(tmp_path)
+                os.replace(tmp_path, final_path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+            self._emit_log(f"netCDF保存: {final_path}")
+        except Exception:
+            tb = traceback.format_exc()
+            self._emit_log(f"netCDF保存エラー:\n{tb}")
 
     # ------------------------------------------------------------------
     def _run_year(self, year: int, full_log: list[str]) -> YearResult:
@@ -405,3 +539,190 @@ def extract_year_timeseries(n, yr: YearResult) -> None:
             yr.demand_ts = n.loads_t.p_set.sum(axis=1)
         elif "p" in n.loads_t and not n.loads_t.p.empty:
             yr.demand_ts = n.loads_t.p.sum(axis=1)
+
+
+# ======================================================================
+# Multi-period extraction: per-investment-period results from a single network
+# ======================================================================
+
+def _extract_multi_period_year(n, yr: YearResult, period: int) -> None:
+    """Extract results for a single investment period from a multi-period network."""
+    import pandas as pd
+    import numpy as np
+
+    has_multi_index = isinstance(n.snapshots, pd.MultiIndex)
+
+    def _period_slice(df):
+        if df is None or df.empty:
+            return df
+        if has_multi_index and period in df.index.get_level_values(0):
+            sliced = df.loc[period]
+            return sliced
+        return df
+
+    # ── Capacity: use p_nom_opt (period-aware in multi-period) ────────
+    if not n.generators.empty:
+        p_nom_opt = n.generators.get("p_nom_opt", n.generators.get("p_nom", 0))
+        # In multi-period, p_nom_opt may be a DataFrame indexed by period
+        if isinstance(p_nom_opt, pd.DataFrame) and period in p_nom_opt.index:
+            p_nom_vals = p_nom_opt.loc[period]
+        else:
+            p_nom_vals = p_nom_opt
+
+        for carrier in n.generators.carrier.unique():
+            mask = n.generators.carrier == carrier
+            cap = float(p_nom_vals[mask].sum())
+            yr.capacity_by_carrier[carrier] = yr.capacity_by_carrier.get(carrier, 0) + cap
+
+            if hasattr(n, "generators_t") and "p" in n.generators_t:
+                gen_p = _period_slice(n.generators_t.p)
+                if gen_p is not None and not gen_p.empty:
+                    cols = [u for u in mask.index[mask] if u in gen_p.columns]
+                    gen_mwh = float(gen_p[cols].sum().sum()) if cols else 0.0
+                else:
+                    gen_mwh = 0.0
+            else:
+                gen_mwh = 0.0
+            yr.generation_by_carrier[carrier] = (
+                yr.generation_by_carrier.get(carrier, 0) + gen_mwh)
+
+            cap_cost = float((n.generators.loc[mask, "capital_cost"] * p_nom_vals[mask]).sum())
+            yr.capex_by_carrier[carrier] = yr.capex_by_carrier.get(carrier, 0) + cap_cost
+
+            if hasattr(n, "generators_t") and "p" in n.generators_t:
+                gen_p = _period_slice(n.generators_t.p)
+                if gen_p is not None and not gen_p.empty:
+                    marg = n.generators.loc[mask, "marginal_cost"]
+                    cols = [u for u in mask.index[mask] if u in gen_p.columns]
+                    if cols:
+                        opex = float((gen_p[cols] * marg[cols]).sum().sum())
+                    else:
+                        opex = 0.0
+                else:
+                    opex = 0.0
+            else:
+                opex = 0.0
+            yr.opex_by_carrier[carrier] = yr.opex_by_carrier.get(carrier, 0) + opex
+
+    # ── CO₂ emissions ─────────────────────────────────────────────────
+    total_co2 = 0.0
+    if not n.generators.empty and hasattr(n, "generators_t") and "p" in n.generators_t:
+        gen_p = _period_slice(n.generators_t.p)
+        if gen_p is not None and not gen_p.empty:
+            for carrier in n.generators.carrier.unique():
+                co2_int = (n.carriers.loc[carrier, "co2_emissions"]
+                           if carrier in n.carriers.index else 0.0)
+                mask = n.generators.carrier == carrier
+                eff = n.generators.loc[mask, "efficiency"].fillna(1.0)
+                cols = [u for u in mask.index[mask] if u in gen_p.columns]
+                if cols:
+                    total_co2 += float((gen_p[cols] / eff[cols] * co2_int).sum().sum())
+    yr.co2_emissions = total_co2
+
+    # ── Time-series (dispatch) ────────────────────────────────────────
+    if not n.generators.empty and hasattr(n, "generators_t") and "p" in n.generators_t:
+        gen_p = _period_slice(n.generators_t.p)
+        if gen_p is not None and not gen_p.empty:
+            carrier_cols = {}
+            for carrier in n.generators.carrier.unique():
+                mask = n.generators.carrier == carrier
+                units = [u for u in mask.index[mask] if u in gen_p.columns]
+                if units:
+                    carrier_cols[carrier] = gen_p[units].sum(axis=1)
+            if carrier_cols:
+                yr.dispatch_df = pd.DataFrame(carrier_cols)
+
+    # ── Pumped hydro links ────────────────────────────────────────────
+    if not n.links.empty and hasattr(n, "links_t"):
+        water_buses = (set(n.stores[n.stores.carrier == "Water"].bus.values)
+                       if not n.stores.empty else set())
+        gen_cols: dict = {}
+        charge_cols: dict = {}
+
+        p0_df = _period_slice(n.links_t.p0) if "p0" in n.links_t else pd.DataFrame()
+        p1_df = _period_slice(n.links_t.p1) if "p1" in n.links_t else pd.DataFrame()
+
+        if p0_df is not None and p1_df is not None:
+            for lk_name, lk in n.links.iterrows():
+                bus0_is_water = lk.bus0 in water_buses
+                bus1_is_water = lk.bus1 in water_buses
+                if not bus0_is_water and not bus1_is_water:
+                    continue
+                label = "Water"
+                if bus0_is_water and not bus1_is_water:
+                    if lk_name in p1_df.columns:
+                        gen = -p1_df[lk_name]
+                    elif lk_name in p0_df.columns:
+                        gen = p0_df[lk_name] * float(lk.get("efficiency", 1.0))
+                    else:
+                        continue
+                    snapshots = gen.index
+                    gen_cols[label] = gen_cols.get(
+                        label, pd.Series(0.0, index=snapshots)) + gen
+                elif not bus0_is_water and bus1_is_water:
+                    if lk_name in p0_df.columns:
+                        snapshots = p0_df[lk_name].index
+                        charge_cols[label] = charge_cols.get(
+                            label, pd.Series(0.0, index=snapshots)) - p0_df[lk_name]
+
+        if gen_cols:
+            yr.link_gen_df = pd.DataFrame(gen_cols)
+        if charge_cols:
+            yr.link_charge_df = pd.DataFrame(charge_cols)
+
+    # ── AC link flows ─────────────────────────────────────────────────
+    if not n.links.empty and hasattr(n, "links_t") and "p0" in n.links_t:
+        p0_df = _period_slice(n.links_t.p0)
+        if p0_df is not None and not p0_df.empty:
+            carrier_col = n.links.get("carrier", pd.Series("", index=n.links.index)).fillna("")
+            _water_bs = (set(n.stores[n.stores.carrier == "Water"].bus.values)
+                         if not n.stores.empty else set())
+            ac_links = [
+                lk for lk in n.links.index[carrier_col == "AC"]
+                if lk in p0_df.columns
+                and n.links.loc[lk, "bus0"] not in _water_bs
+                and n.links.loc[lk, "bus1"] not in _water_bs
+            ]
+            if ac_links:
+                yr.link_flow_df = p0_df[ac_links].copy()
+
+    # ── Curtailment ───────────────────────────────────────────────────
+    if not n.generators.empty and hasattr(n, "generators_t") and "p" in n.generators_t:
+        gen_p = _period_slice(n.generators_t.p)
+        p_max_t = _period_slice(n.generators_t.p_max_pu) if "p_max_pu" in n.generators_t else pd.DataFrame()
+        if gen_p is not None and not gen_p.empty:
+            p_nom_opt = n.generators.get("p_nom_opt", n.generators.get("p_nom", 0))
+            if isinstance(p_nom_opt, pd.DataFrame) and period in p_nom_opt.index:
+                p_nom_vals = p_nom_opt.loc[period]
+            else:
+                p_nom_vals = p_nom_opt
+
+            curtailment_cols: dict = {}
+            for carrier in CF_CARRIERS:
+                mask = n.generators.carrier == carrier
+                units = [u for u in n.generators.index[mask] if u in gen_p.columns]
+                if not units:
+                    continue
+                snapshots = gen_p.index
+                total = pd.Series(0.0, index=snapshots)
+                for unit in units:
+                    if p_max_t is None or p_max_t.empty or unit not in p_max_t.columns:
+                        continue
+                    p_nom = float(p_nom_vals.at[unit]) if hasattr(p_nom_vals, 'at') else float(p_nom_vals[unit])
+                    p_max = p_max_t[unit] * p_nom
+                    total += np.maximum(p_max - gen_p[unit], 0.0)
+                if total.sum() > 1e-3:
+                    curtailment_cols[carrier] = total
+            if curtailment_cols:
+                yr.curtailment_df = pd.DataFrame(curtailment_cols)
+
+    # ── Demand ────────────────────────────────────────────────────────
+    if hasattr(n, "loads_t"):
+        if "p_set" in n.loads_t and not n.loads_t.p_set.empty:
+            demand = _period_slice(n.loads_t.p_set)
+            if demand is not None and not demand.empty:
+                yr.demand_ts = demand.sum(axis=1)
+        elif "p" in n.loads_t and not n.loads_t.p.empty:
+            demand = _period_slice(n.loads_t.p)
+            if demand is not None and not demand.empty:
+                yr.demand_ts = demand.sum(axis=1)

@@ -357,6 +357,7 @@ class ScenarioData:
     planning_years: List[int] = field(default_factory=lambda: [2030])
     discount_rate: float = 0.05
     profile_names: List[str] = field(default_factory=list)
+    multi_period: bool = False
 
     @property
     def planning_year(self) -> int:
