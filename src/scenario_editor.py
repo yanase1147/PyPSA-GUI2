@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView,
     QDoubleSpinBox, QSpinBox, QScrollArea, QPushButton, QLabel,
     QMessageBox, QDialog, QDialogButtonBox, QComboBox, QLineEdit,
-    QSplitter, QInputDialog, QTabWidget,
+    QSplitter, QInputDialog, QTabWidget, QCheckBox,
 )
 from PyQt6.QtCore import Qt
 
@@ -199,9 +199,9 @@ class ScenarioEditor(QWidget):
         h = QHBoxLayout()
 
         # Scenario list table
-        self.scenario_table = QTableWidget(0, 4)
+        self.scenario_table = QTableWidget(0, 5)
         self.scenario_table.setHorizontalHeaderLabels(
-            [self.tr("シナリオ名"), self.tr("基準年"), self.tr("計画年"), self.tr("割引率")])
+            [self.tr("シナリオ名"), self.tr("基準年"), self.tr("計画年"), self.tr("割引率"), self.tr("最適化")])
         self.scenario_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch)
         self.scenario_table.verticalHeader().setVisible(False)
@@ -254,9 +254,18 @@ class ScenarioEditor(QWidget):
         yr_h.addLayout(yr_btn)
         form.addRow(yr_h)
 
+        self.sc_multi_period = QCheckBox(self.tr("完全予見（multi-period）最適化"))
+        self.sc_multi_period.setToolTip(
+            "有効にすると、全計画年を1つのネットワークとして同時最適化します。\n"
+            "投資期間間の設備退役・追加が最適化されます（計画年が2つ以上必要）。\n"
+            "注意: メモリ・計算時間が大幅に増加します。"
+        )
+        form.addRow(self.tr("最適化モード:"), self.sc_multi_period)
+
         self.sc_name.editingFinished.connect(self._save_scenario_fields)
         self.sc_base_year.valueChanged.connect(self._save_scenario_fields)
         self.sc_discount.valueChanged.connect(self._save_scenario_fields)
+        self.sc_multi_period.toggled.connect(self._save_scenario_fields)
 
         h.addWidget(form_widget, 3)
         vlayout.addLayout(h)
@@ -416,6 +425,8 @@ class ScenarioEditor(QWidget):
             self.scenario_table.setItem(r, 1, QTableWidgetItem(str(s.base_year)))
             self.scenario_table.setItem(r, 2, QTableWidgetItem(years_str))
             self.scenario_table.setItem(r, 3, QTableWidgetItem(_fmt(s.discount_rate)))
+            mode_str = "完全予見" if s.multi_period else "単年度"
+            self.scenario_table.setItem(r, 4, QTableWidgetItem(mode_str))
         self._block = False
 
     def _on_scenario_selected(self):
@@ -427,6 +438,7 @@ class ScenarioEditor(QWidget):
         self.sc_name.setText(s.name)
         self.sc_base_year.setValue(s.base_year)
         self.sc_discount.setValue(s.discount_rate)
+        self.sc_multi_period.setChecked(s.multi_period)
         self._populate_sc_year_table(s)
         self._block = False
         # プロファイルテーブルのチェック状態をこのシナリオに合わせて更新
@@ -453,6 +465,7 @@ class ScenarioEditor(QWidget):
         s.name         = self.sc_name.text().strip() or s.name
         s.base_year    = self.sc_base_year.value()
         s.discount_rate = self.sc_discount.value()
+        s.multi_period  = self.sc_multi_period.isChecked()
         self._populate_scenario_table()
         self.scenario_table.selectRow(row)
 
