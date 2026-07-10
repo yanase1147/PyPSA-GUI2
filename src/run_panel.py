@@ -193,7 +193,11 @@ class RunPanel(QWidget):
                               else Qt.CheckState.Unchecked)
             self.scenario_table.setItem(r, 0, chk)
             self.scenario_table.setItem(r, 1, QTableWidgetItem(sc.name))
-            self.scenario_table.setItem(r, 2, QTableWidgetItem(self._scenario_years_text(sc.name)))
+            if sc.multi_period:
+                years_text = "[完全予見] " + ", ".join(str(y) for y in sorted(sc.planning_years))
+            else:
+                years_text = self._scenario_years_text(sc.name)
+            self.scenario_table.setItem(r, 2, QTableWidgetItem(years_text))
 
     def _edit_selected_scenario_years(self):
         row = self.scenario_table.currentRow()
@@ -266,10 +270,19 @@ class RunPanel(QWidget):
         for sc in self._scenarios:
             if not self._scenario_enabled.get(sc.name, True):
                 continue
-            years = sorted(self._scenario_year_selection.get(sc.name, set()))
-            if not years:
-                self._append_log(f"シナリオ '{sc.name}' は計画年が未選択のためスキップします。")
-                continue
+            if sc.multi_period:
+                if len(sc.planning_years) < 2:
+                    self._append_log(
+                        f"シナリオ '{sc.name}': 完全予見モードには計画年が2つ以上必要です。スキップします。")
+                    continue
+                years = sorted(sc.planning_years)
+                self._append_log(
+                    f"シナリオ '{sc.name}': 完全予見モード — 全計画年 {years} を同時最適化します。")
+            else:
+                years = sorted(self._scenario_year_selection.get(sc.name, set()))
+                if not years:
+                    self._append_log(f"シナリオ '{sc.name}' は計画年が未選択のためスキップします。")
+                    continue
             run_items.append((sc, years, self._get_profiles_for_scenario(sc)))
 
         if not run_items:

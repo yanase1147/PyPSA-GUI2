@@ -138,10 +138,10 @@ def _write_network_sheets(wb, network: NetworkData):
 
     # ── Scenarios ────────────────────────────────────────────────────
     ws = wb.create_sheet("scenarios")
-    ws.append(["name", "base_year", "planning_years", "discount_rate", "profile_names"])
+    ws.append(["name", "base_year", "planning_years", "discount_rate", "profile_names", "multi_period"])
     for s in network.scenarios:
         ws.append([s.name, s.base_year, json.dumps(s.planning_years), s.discount_rate,
-                   json.dumps(s.profile_names)])
+                   json.dumps(s.profile_names), s.multi_period])
     _style_ws(ws)
 
     # ── Scenario profiles ────────────────────────────────────────────
@@ -462,12 +462,15 @@ def load_network(filepath: str) -> NetworkData:
                 planning_years = [2030]
         else:
             planning_years = [int(py_raw)] if py_raw is not None else [2030]
+        mp_raw = r.get("multi_period")
+        multi_period = bool(mp_raw) if mp_raw is not None else False
         network.scenarios.append(ScenarioData(
             name=str(r.get("name") or "Scenario1"),
             base_year=_itn(r, "base_year"),
             planning_years=planning_years,
             discount_rate=_flt(r, "discount_rate", 0.05),
             profile_names=json.loads(r["profile_names"]) if isinstance(r.get("profile_names"), str) else [],
+            multi_period=multi_period,
         ))
 
     # ── Scenario profiles ────────────────────────────────────────────

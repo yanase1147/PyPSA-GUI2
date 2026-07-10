@@ -566,6 +566,381 @@ def build_network(
     return n
 
 
+def build_multi_period_network(
+    net: NetworkData,
+    scenario: ScenarioData,
+    ts: TimeSeriesData,
+    planning_years: List[int],
+    *,
+    active_profiles: List[ScenarioProfile] = None,
+    solver_name: str = "highs",
+    snapshot_step: int = 1,
+) -> pypsa.Network:
+    """Return a pypsa.Network with multi-period investment optimization (perfect foresight).
+
+    All planning_years are embedded as investment_periods in a single network.
+    PyPSA solves all periods simultaneously, linking investments across periods
+    via build_year and lifetime constraints.
+    """
+    if active_profiles is None:
+        active_profiles = []
+    if snapshot_step < 1:
+        snapshot_step = 1
+
+    planning_years = sorted(planning_years)
+    if len(planning_years) < 2:
+        raise ValueError("完全予見最適化には2つ以上の計画年が必要です。")
+
+    n = pypsa.Network()
+
+    periods = pd.Index(planning_years, name="period")
+    n.investment_periods = periods
+
+    period_lengths = []
+    for i, yr in enumerate(planning_years):
+        if i + 1 < len(planning_years):
+            period_lengths.append(planning_years[i + 1] - yr)
+        else:
+            period_lengths.append(planning_years[-1] - planning_years[-2])
+    n.investment_period_weightings["years"] = period_lengths
+
+    r = scenario.discount_rate
+    if r > 0:
+        n.investment_period_weightings["objective"] = [
+            1.0 / (1 + r) ** (yr - planning_years[0]) for yr in planning_years
+        ]
+    else:
+        n.investment_period_weightings["objective"] = 1.0
+
+    representative_snapshots = pd.date_range("2019-01-01", periods=N_HOURS, freq="h")[::snapshot_step]
+
+    snapshots = pd.MultiIndex.from_product(
+        [periods, representative_snapshots], names=["period", "timestep"]
+    )
+    n.set_snapshots(snapshots)
+    if snapshot_step > 1:
+        n.snapshot_weightings = n.snapshot_weightings * snapshot_step
+
+    carrier_costs = resolve_carrier_costs(active_profiles)
+
+    # ── Areas → PyPSA Buses ──────────────────────────────────────────
+    for area in net.areas:
+        n.add("Bus", area.name, v_nom=380.0, x=area.lon, y=area.lat,
+              carrier="AC", country=area.country)
+
+    needed_carriers = _collect_needed_carriers(net)
+    for area_name, carriers in needed_carriers.items():
+        for carrier in carriers:
+            n.add("Bus", f"{area_name}-{carrier}", carrier=carrier)
+
+    # ── Carriers ─────────────────────────────────────────────────────
+    for carrier, costs in carrier_costs.items():
+        co2_int = costs.get("co2_intensity", 0.0)
+        n.add("Carrier", carrier, co2_emissions=co2_int,
+              color=_carrier_color(carrier))
+
+    used_carriers = set(net.multi_carriers())
+    used_carriers.update(g.bus_carrier for g in net.all_generators if g.bus_carrier)
+    used_carriers.update(ld.bus_carrier for ld in net.all_loads if ld.bus_carrier)
+    used_carriers.update(st.carrier for st in net.all_stores if st.carrier)
+    for carrier in used_carriers:
+        if carrier and carrier not in n.carriers.index:
+            n.add("Carrier", carrier)
+
+    # For multi-period: use overnight capital_cost (NOT annualized).
+    # PyPSA handles annualization internally via investment_period_weightings.
+
+    area_names = [a.name for a in net.areas]
+
+    # Use overrides from the first planning year for static component parameters.
+    # Per-period CO2 constraints are applied separately below.
+    overrides = _compute_overrides(active_profiles, planning_years[0])
+
+    # ── Generators ────────────────────────────────────────────────────
+    for area in net.areas:
+        gen_names_in_area = [g.name for g in net.all_generators if g.area == area.name]
+        dup_names = [name for name, cnt in Counter(gen_names_in_area).items() if cnt > 1]
+        if dup_names:
+            raise ValueError(
+                f"エリア '{area.name}' で発電機名が重複しています。\n"
+                "重複: " + ", ".join(dup_names)
+            )
+    for gen in net.all_generators:
+        if gen.area not in area_names:
+            continue
+        gen = _apply_overrides(gen, "Generator", overrides)
+        costs = carrier_costs.get(gen.carrier, {})
+        cap_cost_raw = gen.capital_cost if gen.capital_cost else costs.get("capital_cost", 0.0)
+        lt = _get_lifetime(gen.lifetime, costs)
+        marg_cost = gen.marginal_cost if gen.marginal_cost else costs.get("marginal_cost", 0.0)
+        efficiency = gen.efficiency if gen.efficiency else costs.get("efficiency", 1.0)
+
+        kwargs: dict = dict(
+            bus=_bus_name(gen.area, gen.bus_carrier),
+            carrier=gen.carrier,
+            p_nom=gen.p_nom,
+            p_nom_extendable=gen.p_nom_extendable,
+            p_nom_max=gen.p_nom_max if gen.p_nom_extendable else np.inf,
+            marginal_cost=marg_cost,
+            capital_cost=cap_cost_raw,
+            efficiency=efficiency,
+            build_year=gen.build_year,
+            lifetime=lt,
+            p_max_pu=gen.p_max_pu,
+            p_min_pu=gen.p_min_pu,
+            committable=gen.committable,
+            min_up_time=gen.min_up_time,
+            ramp_limit_up=gen.ramp_limit_up,
+            ramp_limit_down=gen.ramp_limit_down,
+        )
+
+        if gen.carrier in CF_CARRIERS:
+            cf_dict = ts.cf_for_carrier(gen.carrier)
+            cf_vals = cf_dict.get(gen.name, [])
+            if cf_vals and any(v != 0.0 for v in cf_vals):
+                if ts.ts_mode.get(gen.name, "cf") == "mw" and gen.p_nom > 0:
+                    cf_vals = [v / gen.p_nom for v in cf_vals]
+                ds_vals = _downsample_timeseries(cf_vals, snapshot_step, mode="mean")
+                tiled = ds_vals * len(planning_years)
+                kwargs["p_max_pu"] = tiled
+        else:
+            cf_vals = ts.gen_cf.get(gen.name, [])
+            if cf_vals and any(v != 0.0 for v in cf_vals):
+                if ts.ts_mode.get(gen.name, "cf") == "mw" and gen.p_nom > 0:
+                    cf_vals = [v / gen.p_nom for v in cf_vals]
+                ds_vals = _downsample_timeseries(cf_vals, snapshot_step, mode="mean")
+                tiled = ds_vals * len(planning_years)
+                kwargs["p_max_pu"] = tiled
+
+        if ts.fixed_output.get(gen.name, False):
+            kwargs["p_min_pu"] = kwargs["p_max_pu"]
+
+        gen_name_unique = _unique_component_name(n, "Generator", gen.name, scope_hint=gen.area)
+        n.add("Generator", gen_name_unique, **kwargs)
+
+    # ── Converters → PyPSA Links ──────────────────────────────────────
+    for conv in net.all_converters:
+        if conv.area not in area_names:
+            continue
+        conv = _apply_overrides(conv, "Converter", overrides)
+        conv_costs = carrier_costs.get(conv.carrier_in, {})
+        conv_lt = _get_lifetime(conv.lifetime, conv_costs)
+        kwargs = dict(
+            bus0=_bus_name(conv.area, conv.carrier_in),
+            bus1=_bus_name(conv.area, conv.carrier_out),
+            efficiency=conv.efficiency,
+            p_nom=conv.p_nom,
+            p_nom_extendable=conv.p_nom_extendable,
+            p_nom_max=conv.p_nom_max if conv.p_nom_extendable else np.inf,
+            marginal_cost=conv.marginal_cost,
+            capital_cost=conv.capital_cost,
+            build_year=conv.build_year,
+            lifetime=conv_lt,
+        )
+        if conv.carrier_out2:
+            kwargs["bus2"] = _bus_name(conv.area, conv.carrier_out2)
+            kwargs["efficiency2"] = conv.efficiency2
+        conv_name_unique = _unique_component_name(
+            n, "Link", conv.name, scope_hint=conv.area
+        )
+        n.add("Link", conv_name_unique, **kwargs)
+
+    # ── Interconnections → PyPSA Links ────────────────────────────────
+    for ic in net.interconnections:
+        if ic.area0 not in area_names:
+            continue
+        if ic.area1 not in area_names:
+            continue
+        ic = _apply_overrides(ic, "Interconnection", overrides)
+        ic_carrier = ic.carrier if ic.carrier else "AC"
+        ic_costs = carrier_costs.get(ic.carrier, {"lifetime": 40}) if ic.carrier else {"lifetime": 40}
+        ic_lt = _get_lifetime(ic.lifetime, ic_costs)
+        p_min_pu = (-ic.p_nom_reverse / ic.p_nom
+                    if ic.p_nom_reverse > 0 and ic.p_nom > 0 else 0.0)
+        kwargs = dict(
+            bus0=_bus_name(ic.area0, ic_carrier),
+            bus1=_bus_name(ic.area1, ic_carrier),
+            efficiency=ic.efficiency,
+            p_nom=ic.p_nom,
+            p_min_pu=p_min_pu,
+            p_nom_extendable=ic.p_nom_extendable,
+            capital_cost=ic.capital_cost,
+            marginal_cost=ic.marginal_cost,
+            build_year=ic.build_year,
+            lifetime=ic_lt,
+        )
+        if ic.carrier:
+            kwargs["carrier"] = ic.carrier
+        ic_name_unique = _unique_component_name(n, "Link", ic.name, scope_hint=f"{ic.area0}_{ic.area1}")
+        n.add("Link", ic_name_unique, **kwargs)
+
+    # ── Loads (tiled for each period) ─────────────────────────────────
+    for area in net.areas:
+        load_names_in_area = [ld.name for ld in net.all_loads if ld.area == area.name]
+        dup_names = [name for name, cnt in Counter(load_names_in_area).items() if cnt > 1]
+        if dup_names:
+            raise ValueError(
+                f"エリア '{area.name}' で需要名が重複しています。\n"
+                "重複: " + ", ".join(dup_names)
+            )
+    for load in net.all_loads:
+        if load.area not in area_names:
+            continue
+        bus = _bus_name(load.area, load.bus_carrier)
+        demand_raw = ts.get_demand_for_load(load.area, load.name) or [load.p_set] * N_HOURS
+        ds_vals = _downsample_timeseries(demand_raw, snapshot_step, mode="mean")
+        tiled = ds_vals * len(planning_years)
+        load_name_unique = _unique_component_name(n, "Load", load.name, scope_hint=load.area)
+        n.add("Load", load_name_unique, bus=bus, p_set=tiled)
+
+    # ── Stores ───────────────────────────────────────────────────────
+    for area in net.areas:
+        store_names_in_area = [st.name for st in net.all_stores if st.area == area.name]
+        dup_names = [name for name, cnt in Counter(store_names_in_area).items() if cnt > 1]
+        if dup_names:
+            raise ValueError(
+                f"エリア '{area.name}' で蓄電池名が重複しています。\n"
+                "重複: " + ", ".join(dup_names)
+            )
+    for st in net.all_stores:
+        if st.area not in area_names:
+            continue
+        st = _apply_overrides(st, "Store", overrides)
+        bus = _bus_name(st.area, st.carrier)
+        store_name_unique = _unique_component_name(n, "Store", st.name, scope_hint=st.area)
+        st_costs = carrier_costs.get(st.carrier, {})
+        st_lt = _get_lifetime(st.lifetime, st_costs)
+        n.add("Store", store_name_unique,
+              bus=bus,
+              e_nom=st.e_nom,
+              e_nom_extendable=st.e_nom_extendable,
+              capital_cost=st.capital_cost,
+              lifetime=st_lt,
+              carrier=st.carrier if st.carrier else "other")
+
+    # ── Pumped hydro ─────────────────────────────────────────────────
+    for area in net.areas:
+        ph_names_in_area = [ph.name for ph in net.all_pumped_hydros if ph.ac_area == area.name]
+        dup_names = [name for name, cnt in Counter(ph_names_in_area).items() if cnt > 1]
+        if dup_names:
+            raise ValueError(
+                f"エリア '{area.name}' で揚水発電名が重複しています。\n"
+                "重複: " + ", ".join(dup_names)
+            )
+    for ph in net.all_pumped_hydros:
+        if ph.ac_area not in area_names:
+            continue
+        ph = _apply_overrides(ph, "PumpedHydro", overrides)
+        ph_name_unique = _unique_component_name(n, "Bus", ph.name, scope_hint=ph.ac_area)
+        water_bus = f"{ph_name_unique}-water"
+        costs = carrier_costs.get("Hydro", {})
+        cap_cost_raw = ph.capital_cost if ph.capital_cost else costs.get("capital_cost", 0.0)
+        ph_lt = _get_lifetime(ph.lifetime, costs)
+        marg_cost = ph.marginal_cost if ph.marginal_cost else costs.get("marginal_cost", 0.0)
+        n.add("Bus", water_bus, carrier="Water")
+        n.add("Store", f"{ph_name_unique}-store",
+              bus=water_bus,
+              e_nom=ph.e_nom,
+              e_nom_extendable=False,
+              carrier="Water")
+        n.add("Link", f"{ph_name_unique}-turbine",
+              bus0=water_bus, bus1=ph.ac_area,
+              efficiency=ph.efficiency_turbine,
+              p_nom=ph.p_nom_turbine,
+              p_nom_extendable=ph.p_nom_extendable,
+              p_nom_max=np.inf if ph.p_nom_extendable else ph.p_nom_turbine,
+              capital_cost=cap_cost_raw,
+              marginal_cost=marg_cost,
+              build_year=ph.build_year,
+              lifetime=ph_lt)
+        n.add("Link", f"{ph_name_unique}-pump",
+              bus0=ph.ac_area, bus1=water_bus,
+              efficiency=ph.efficiency_pump,
+              p_nom=ph.p_nom_pump,
+              p_nom_extendable=ph.p_nom_extendable,
+              p_nom_max=np.inf if ph.p_nom_extendable else ph.p_nom_pump,
+              build_year=ph.build_year,
+              lifetime=ph_lt)
+
+    # ── Custom compound components ────────────────────────────────────
+    for ci in net.all_custom_instances:
+        if ci.area not in area_names:
+            continue
+        ci_params = overrides.get(("CustomComponentInstance", ci.name), {})
+        if ci_params:
+            ci = copy.copy(ci)
+            ci.param_values = {**ci.param_values, **ci_params}
+        tmpl = net.get_template(ci.template_name)
+        if not tmpl:
+            continue
+        ci_lt = ci.lifetime if ci.lifetime > 0 else 25
+
+        sub_name_map: dict[str, str] = {}
+        for sub in tmpl.sub_components:
+            base_name = sub.name_template.replace("{name}", ci.name)
+            sub_name_map[sub.sub_id] = _unique_component_name(
+                n, sub.component_type, base_name,
+                scope_hint=f"{ci.area}_{ci.name}",
+            )
+
+        for sub in tmpl.sub_components:
+            actual_name = sub_name_map.get(
+                sub.sub_id,
+                sub.name_template.replace("{name}", ci.name),
+            )
+            params: dict = dict(sub.fixed_params)
+            for p_name in sub.exposed_params:
+                key = f"{sub.sub_id}.{p_name}"
+                if key in ci.param_values:
+                    params[p_name] = ci.param_values[key]
+
+            if "lifetime" not in params:
+                params["lifetime"] = ci_lt
+
+            ct = sub.component_type
+            if ct == "Bus":
+                n.add("Bus", actual_name, **params)
+            elif ct == "Store":
+                bus_ref = sub.bus_connections.get("bus", "")
+                if bus_ref:
+                    params["bus"] = _resolve_bus_ref(
+                        bus_ref, ci.area, ci.name, tmpl, sub_name_map)
+                n.add("Store", actual_name, **params)
+            elif ct == "Generator":
+                bus_ref = sub.bus_connections.get("bus", "")
+                if bus_ref:
+                    params["bus"] = _resolve_bus_ref(
+                        bus_ref, ci.area, ci.name, tmpl, sub_name_map)
+                n.add("Generator", actual_name, **params)
+            elif ct == "Link":
+                for slot in ("bus0", "bus1", "bus2"):
+                    ref = sub.bus_connections.get(slot)
+                    if ref:
+                        params[slot] = _resolve_bus_ref(
+                            ref, ci.area, ci.name, tmpl, sub_name_map)
+                n.add("Link", actual_name, **params)
+
+    # ── Per-period CO₂ constraints ───────────────────────────────────
+    for yr in planning_years:
+        co2_cfg = resolve_co2_settings(active_profiles, yr)
+        co2_limit = co2_cfg["co2_limit"]
+        co2_price = co2_cfg["co2_price"]
+        if co2_limit < 1e18:
+            n.add("GlobalConstraint", f"co2_limit_{yr}",
+                  sense="<=",
+                  constant=co2_limit,
+                  carrier_attribute="co2_emissions",
+                  investment_period=yr)
+        if co2_price > 0:
+            for carrier_name, costs in carrier_costs.items():
+                co2_int = costs.get("co2_intensity", 0.0)
+                if co2_int > 0:
+                    for gen in n.generators[n.generators.carrier == carrier_name].index:
+                        n.generators.loc[gen, "marginal_cost"] += co2_price * co2_int
+
+    return n
+
+
 def _carrier_color(carrier: str) -> str:
     from .models import CARRIER_COLORS
     return CARRIER_COLORS.get(carrier, "#808080")
