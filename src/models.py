@@ -27,6 +27,11 @@ CARRIER_COLORS = {
     "Battery": "#9370DB",
     "Petcoke": "#4B0082",
     "Cogeneration": "#FF69B4",
+    # セクターカップリングLink（ACバスと非ACバスをつなぐConverter）の相手側バスキャリア
+    "heat": "#FF8C00",
+    "hydrogen": "#00CED1",
+    "gas": "#A0522D",
+    "DC": "#4682B4",
 }
 
 DEFAULT_CARRIER_COSTS: Dict[str, Dict[str, float]] = {

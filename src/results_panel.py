@@ -691,7 +691,7 @@ class ResultsPanel(QWidget):
                 return dt.strftime("%m/%d\n%H:00")
             return ""
 
-        _link_display = {"Water": "揚水"}
+        _link_display = {"Water": "揚水", "heat": "熱", "hydrogen": "水素", "gas": "ガス", "DC": "DC"}
         _STACK_ORDER = [
             "Nuclear", "Hydro", "Biomass", "Wind",
             "Coal", "Gas", "Oil", "Solar", "揚水放電", "Other",
@@ -750,7 +750,18 @@ class ResultsPanel(QWidget):
                 ax.stackplot(x_stack, *y_stack, labels=sorted_labels,
                              colors=sorted_colors, alpha=0.85)
 
+        # ── 需要（ゼロ軸より下）と蓄電・揚水の充電（さらに下に積み上げ）──
         neg_bottom = np.zeros(len(h))
+
+        if yr.demand_ts is not None:
+            demand = self._slice_1d(yr.demand_ts.values, start, end)
+            m = min(len(h), len(demand))
+            if m > 0:
+                demand_neg = -np.maximum(demand[:m], 0.0)
+                ax.fill_between(h[:m], neg_bottom[:m], neg_bottom[:m] + demand_neg,
+                                alpha=0.85, color="firebrick", label="需要")
+                neg_bottom[:m] += demand_neg
+
         for label, color, arr in stor_charge_bands:
             m = min(len(h), len(arr))
             if m <= 0:
@@ -758,13 +769,6 @@ class ResultsPanel(QWidget):
             ax.fill_between(h[:m], neg_bottom[:m], neg_bottom[:m] + arr[:m],
                             alpha=0.85, color=color, label=label)
             neg_bottom[:m] += arr[:m]
-
-        if yr.demand_ts is not None:
-            demand = self._slice_1d(yr.demand_ts.values, start, end)
-            m = min(len(h), len(demand))
-            if m > 0:
-                ax.plot(h[:m], demand[:m], color="red", linewidth=1.0,
-                        label="需要", zorder=10)
 
         ax.axhline(0, color="black", linewidth=0.5, zorder=5)
         ax.xaxis.set_major_formatter(FuncFormatter(_fmt_hour))

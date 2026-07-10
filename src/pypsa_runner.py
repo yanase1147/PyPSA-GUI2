@@ -306,16 +306,21 @@ def extract_year_timeseries(n, yr: YearResult) -> None:
         if carrier_cols:
             yr.dispatch_df = pd.DataFrame(carrier_cols)
 
-    # Links involving Water buses (pumped hydro: Link + Store + Water Bus)
-    # Water buses are identified via n.stores.bus (stores carry carrier="Water")
-    # PyPSA sign convention: p1 = -efficiency * p0 → p1 is NEGATIVE in stored results
-    # Turbine (Water→AC): power delivered to AC = -p1
-    # Pump    (AC→Water): power consumed from AC = p0  → stored as negative
+    # Links that cross the AC boundary: pumped hydro (Link + Store + Water bus)
+    # as well as any sector-coupling Converter whose bus0/bus1 sits on the AC bus
+    # (heat pump, electrolyzer, CHP, gas boiler, etc.). One endpoint is on an
+    # AC-carrier bus and the other is not → the AC-side flow is treated as either
+    # generation (non-AC → AC) or demand (AC → non-AC) in the supply-demand
+    # balance chart, grouped by the *other* bus's carrier (e.g. "Water", "heat",
+    # "hydrogen", "gas").
+    # PyPSA sign convention: p1 = -efficiency * p0 → p1 is NEGATIVE in stored results.
+    ac_boundary_links: set = set()
     if not n.links.empty and hasattr(n, "links_t"):
-        # carrier=="Water" のStoreのみ対象。一次資源Store（3.3節）はcarrier=資源キャリア
-        # （Solar/Gas等）であり"Water"とは重複しないため、ここでは誤検出しない。
-        water_buses = (set(n.stores[n.stores.carrier == "Water"].bus.values)
-                       if not n.stores.empty else set())
+        bus_carrier = n.buses["carrier"] if "carrier" in n.buses.columns else pd.Series(dtype=str)
+
+        def _is_ac_bus(bus_name: str) -> bool:
+            return bus_carrier.get(bus_name, "") == "AC"
+
         gen_cols: dict = {}
         charge_cols: dict = {}
 
@@ -323,17 +328,25 @@ def extract_year_timeseries(n, yr: YearResult) -> None:
         p1_df = n.links_t.p1 if "p1" in n.links_t else pd.DataFrame()
 
         for lk_name, lk in n.links.iterrows():
-            bus0_is_water = lk.bus0 in water_buses
-            bus1_is_water = lk.bus1 in water_buses
+            bus0_ac = _is_ac_bus(lk.bus0)
+            bus1_ac = _is_ac_bus(lk.bus1)
 
-            # Skip pure AC transmission links (neither end is a Water bus)
-            if not bus0_is_water and not bus1_is_water:
+            # Both AC (inter-area transmission) or neither AC → not part of the
+            # AC supply-demand balance chart.
+            if bus0_ac == bus1_ac:
                 continue
 
-            label = "Water"
+            ac_boundary_links.add(lk_name)
 
-            # Turbine: Water → AC  →  generation = -p1  (p1 is negative in PyPSA)
-            if bus0_is_water and not bus1_is_water:
+            if bus0_ac:
+                # AC → non-AC: power leaves the AC bus (pump / sector coupling)
+                if lk_name in p0_df.columns:
+                    label = bus_carrier.get(lk.bus1, lk_name)
+                    charge_cols[label] = charge_cols.get(
+                        label, pd.Series(0.0, index=n.snapshots)) - p0_df[lk_name]
+            else:
+                # non-AC → AC: power enters the AC bus (turbine / fuel cell / CHP)
+                label = bus_carrier.get(lk.bus0, lk_name)
                 if lk_name in p1_df.columns:
                     gen = -p1_df[lk_name]
                 elif lk_name in p0_df.columns:
@@ -343,33 +356,21 @@ def extract_year_timeseries(n, yr: YearResult) -> None:
                 gen_cols[label] = gen_cols.get(
                     label, pd.Series(0.0, index=n.snapshots)) + gen
 
-            # Pump: AC → Water  →  consumption = p0  (stored as negative)
-            elif not bus0_is_water and bus1_is_water:
-                if lk_name in p0_df.columns:
-                    charge_cols[label] = charge_cols.get(
-                        label, pd.Series(0.0, index=n.snapshots)) - p0_df[lk_name]
-                else:
-                    continue
-
         if gen_cols:
             yr.link_gen_df = pd.DataFrame(gen_cols)
         if charge_cols:
             yr.link_charge_df = pd.DataFrame(charge_cols)
 
-    # AC-carrier Link power flow (p0 per individual link)
-    # Exclude pumped-hydro pump links: PyPSA auto-assigns carrier='AC' to links whose
-    # bus0 is an AC bus, so pump links (AC→Water) would otherwise be misidentified as
-    # transmission lines.  Filter them out by checking neither endpoint is a water bus.
+    # AC-carrier Link power flow (p0 per individual link) — pure inter-area
+    # transmission only. Links already classified as AC-boundary-crossing above
+    # (pumped hydro, sector-coupling converters) are excluded here so they don't
+    # get double-counted / misidentified as transmission lines.
     if not n.links.empty and hasattr(n, "links_t") and "p0" in n.links_t:
         p0_df = n.links_t.p0
         carrier_col = n.links.get("carrier", pd.Series("", index=n.links.index)).fillna("")
-        _water_bs = (set(n.stores[n.stores.carrier == "Water"].bus.values)
-                    if not n.stores.empty else set())
         ac_links = [
             lk for lk in n.links.index[carrier_col == "AC"]
-            if lk in p0_df.columns
-            and n.links.loc[lk, "bus0"] not in _water_bs
-            and n.links.loc[lk, "bus1"] not in _water_bs
+            if lk in p0_df.columns and lk not in ac_boundary_links
         ]
         if ac_links:
             yr.link_flow_df = p0_df[ac_links].copy()
