@@ -390,12 +390,15 @@ def build_network(
     for load in net.all_loads:
         if load.area not in area_names:
             continue
+        load = _apply_overrides(load, "Load", overrides)
         bus = _bus_name(load.area, load.bus_carrier)
         demand_raw = ts.get_demand_for_load(load.area, load.name) or [load.p_set] * N_HOURS
         # Generate unique name if needed (allows same names in different areas)
         load_name_unique = _unique_component_name(n, "Load", load.name, scope_hint=load.area)
-        n.add("Load", load_name_unique, bus=bus,
-              p_set=_downsample_timeseries(demand_raw, snapshot_step, mode="mean"))
+        p_set = _downsample_timeseries(demand_raw, snapshot_step, mode="mean")
+        if load.demand_scale != 1.0:
+            p_set = [v * load.demand_scale for v in p_set]
+        n.add("Load", load_name_unique, bus=bus, p_set=p_set)
 
     # ── Stores ───────────────────────────────────────────────────────
     # Validate: each area can have unique names independently
@@ -783,13 +786,22 @@ def build_multi_period_network(
                 f"エリア '{area.name}' で需要名が重複しています。\n"
                 "重複: " + ", ".join(dup_names)
             )
+    # demand_scale はプロファイルで年ごとに変化しうる（例: 需要成長率）ため、
+    # 全期間で一括タイルせず、計画年ごとにオーバーライドを再解決してから連結する。
+    overrides_by_year = {py: _compute_overrides(active_profiles, py) for py in planning_years}
     for load in net.all_loads:
         if load.area not in area_names:
             continue
         bus = _bus_name(load.area, load.bus_carrier)
         demand_raw = ts.get_demand_for_load(load.area, load.name) or [load.p_set] * N_HOURS
         ds_vals = _downsample_timeseries(demand_raw, snapshot_step, mode="mean")
-        tiled = ds_vals * len(planning_years)
+        tiled: list = []
+        for py in planning_years:
+            load_y = _apply_overrides(load, "Load", overrides_by_year[py])
+            if load_y.demand_scale != 1.0:
+                tiled.extend(v * load_y.demand_scale for v in ds_vals)
+            else:
+                tiled.extend(ds_vals)
         load_name_unique = _unique_component_name(n, "Load", load.name, scope_hint=load.area)
         n.add("Load", load_name_unique, bus=bus, p_set=tiled)
 

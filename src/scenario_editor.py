@@ -45,6 +45,7 @@ _COMPONENT_PARAMS: dict = {
         "efficiency", "p_nom", "p_nom_reverse", "p_nom_extendable",
         "capital_cost", "marginal_cost", "build_year",
     ],
+    "Load": ["demand_scale", "p_set"],
     "CustomComponentInstance": [],
 }
 _COMPONENT_TYPES = list(_COMPONENT_PARAMS.keys())
@@ -113,6 +114,7 @@ class RuleDialog(QDialog):
             "PumpedHydro":            [p.name for p in self._network.all_pumped_hydros],
             "Converter":              [c.name for c in self._network.all_converters],
             "Interconnection":        [i.name for i in self._network.interconnections],
+            "Load":                   [l.name for l in self._network.all_loads],
             "CustomComponentInstance":[ci.name for ci in self._network.all_custom_instances],
         }
         return mapping.get(ctype, [])

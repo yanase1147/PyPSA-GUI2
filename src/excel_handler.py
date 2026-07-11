@@ -83,9 +83,9 @@ def _write_network_sheets(wb, network: NetworkData):
     _style_ws(ws)
 
     ws = wb.create_sheet("loads")
-    ws.append(["name", "area", "p_set", "bus_carrier"])
+    ws.append(["name", "area", "p_set", "bus_carrier", "demand_scale"])
     for ld in network.all_loads:
-        ws.append([ld.name, ld.area, ld.p_set, ld.bus_carrier])
+        ws.append([ld.name, ld.area, ld.p_set, ld.bus_carrier, ld.demand_scale])
     _style_ws(ws)
 
     ws = wb.create_sheet("converters")
@@ -353,6 +353,7 @@ def load_network(filepath: str) -> NetworkData:
             name=str(r.get("name", "")), area=str(area_val),
             p_set=_flt(r, "p_set"),
             bus_carrier=str(r.get("bus_carrier") or "AC"),
+            demand_scale=_flt(r, "demand_scale", 1.0),
         ))
 
     _stores: list = []

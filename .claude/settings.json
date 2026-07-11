@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"C:\\\\Users\\\\takashi-yanase\\\\AppData\\\\Local\\\\miniconda3\\\\envs\\\\pypsa_Japan\\\\python.exe\" \"C:\\\\Users\\\\TAKASH~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-takashi-yanase-Documents-PyPSA-PyPSA-GUI2\\\\ed4c12fa-b300-4984-828f-23c043a19687\\\\scratchpad\\\\test_sector_coupling_balance.py\")",
+      "PowerShell(& \"C:\\\\Users\\\\takashi-yanase\\\\AppData\\\\Local\\\\miniconda3\\\\envs\\\\pypsa_Japan\\\\python.exe\" \"C:\\\\Users\\\\TAKASH~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-takashi-yanase-Documents-PyPSA-PyPSA-GUI2\\\\ed4c12fa-b300-4984-828f-23c043a19687\\\\scratchpad\\\\test_pumped_hydro_regression.py\")",
+      "PowerShell(Get-Process -Id 38416 -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Id 38416 -Force -ErrorAction SilentlyContinue)"
+    ]
+  }
+}

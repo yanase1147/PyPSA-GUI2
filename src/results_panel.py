@@ -139,6 +139,11 @@ class ResultsPanel(QWidget):
         self._build_multi_tab()
         self.tab_widget.addTab(self.multi_tab, self.tr("多年比較"))
 
+        # Tab 3: scenario comparison
+        self.scenario_tab = QWidget()
+        self._build_scenario_tab()
+        self.tab_widget.addTab(self.scenario_tab, self.tr("シナリオ比較"))
+
         layout.addWidget(self.tab_widget, stretch=1)
 
     def _build_single_tab(self):
@@ -295,6 +300,44 @@ class ResultsPanel(QWidget):
         row2.addWidget(FigureCanvas(self.multi_co2int_fig))
         layout.addLayout(row2)
 
+    def _build_scenario_tab(self):
+        layout = QVBoxLayout(self.scenario_tab)
+        layout.setSpacing(4)
+
+        ctrl = QHBoxLayout()
+        ctrl.addWidget(QLabel(self.tr("比較年:")))
+        self.scen_year_combo = QComboBox()
+        self.scen_year_combo.currentIndexChanged.connect(self._on_scen_year_changed)
+        ctrl.addWidget(self.scen_year_combo)
+        ctrl.addStretch()
+        layout.addLayout(ctrl)
+
+        # Capacity by scenario (stacked by carrier)
+        self.scen_cap_fig = Figure(figsize=(10, 3), dpi=90, tight_layout=True)
+        self.scen_cap_ax  = self.scen_cap_fig.add_subplot(111)
+        layout.addWidget(FigureCanvas(self.scen_cap_fig))
+
+        # CO₂, cost, LCOE, CO₂ intensity by scenario
+        row = QHBoxLayout()
+        self.scen_co2_fig = Figure(figsize=(5, 3), dpi=90, tight_layout=True)
+        self.scen_co2_ax  = self.scen_co2_fig.add_subplot(111)
+        row.addWidget(FigureCanvas(self.scen_co2_fig))
+
+        self.scen_cost_fig = Figure(figsize=(5, 3), dpi=90, tight_layout=True)
+        self.scen_cost_ax  = self.scen_cost_fig.add_subplot(111)
+        row.addWidget(FigureCanvas(self.scen_cost_fig))
+        layout.addLayout(row)
+
+        row2 = QHBoxLayout()
+        self.scen_lcoe_fig = Figure(figsize=(5, 3), dpi=90, tight_layout=True)
+        self.scen_lcoe_ax  = self.scen_lcoe_fig.add_subplot(111)
+        row2.addWidget(FigureCanvas(self.scen_lcoe_fig))
+
+        self.scen_co2int_fig = Figure(figsize=(5, 3), dpi=90, tight_layout=True)
+        self.scen_co2int_ax  = self.scen_co2int_fig.add_subplot(111)
+        row2.addWidget(FigureCanvas(self.scen_co2int_fig))
+        layout.addLayout(row2)
+
     # ── Public API ────────────────────────────────────────────────────
     @staticmethod
     def _parse_nc_filename(basename: str) -> tuple[str, int]:
@@ -444,6 +487,15 @@ class ResultsPanel(QWidget):
         if scenarios:
             first = list(scenarios.values())[0]
             self._apply_results(first)
+
+        # シナリオ比較タブの比較年を更新
+        all_years = sorted({yr.year for res in scenarios.values() for yr in res.year_results})
+        self.scen_year_combo.blockSignals(True)
+        self.scen_year_combo.clear()
+        self.scen_year_combo.addItems([str(y) for y in all_years])
+        self.scen_year_combo.blockSignals(False)
+        if all_years:
+            self._draw_scenario_comparison(all_years[0])
 
     def _apply_results(self, results: OptimizationResults):
         """指定シナリオの結果を全タブに反映する。"""
@@ -608,6 +660,97 @@ class ResultsPanel(QWidget):
         self.multi_co2int_ax.set_title(self.tr("CO₂原単位推移 [gCO₂/kWh]"))
         self.multi_co2int_ax.set_xlabel(self.tr("計画年"))
         self.multi_co2int_fig.canvas.draw()
+
+    # ── Scenario comparison ─────────────────────────────────────────────
+    def _on_scen_year_changed(self, idx: int):
+        if idx < 0:
+            return
+        try:
+            year = int(self.scen_year_combo.currentText())
+        except ValueError:
+            return
+        self._draw_scenario_comparison(year)
+
+    def _draw_scenario_comparison(self, year: int):
+        yr_by_scenario: dict[str, YearResult] = {}
+        for name, results in self._all_scenarios.items():
+            match = next((yr for yr in results.year_results if yr.year == year), None)
+            if match is not None:
+                yr_by_scenario[name] = match
+        names = list(yr_by_scenario.keys())
+
+        self.scen_cap_ax.clear()
+        self.scen_co2_ax.clear()
+        self.scen_cost_ax.clear()
+        self.scen_lcoe_ax.clear()
+        self.scen_co2int_ax.clear()
+        if not names:
+            for ax in (self.scen_cap_ax, self.scen_co2_ax, self.scen_cost_ax,
+                       self.scen_lcoe_ax, self.scen_co2int_ax):
+                ax.text(0.5, 0.5, self.tr("該当年のデータがありません"),
+                        transform=ax.transAxes, ha="center", va="center", fontsize=10)
+            for fig in (self.scen_cap_fig, self.scen_co2_fig, self.scen_cost_fig,
+                        self.scen_lcoe_fig, self.scen_co2int_fig):
+                fig.canvas.draw()
+            return
+
+        x = np.arange(len(names))
+
+        # Capacity by scenario (stacked by carrier)
+        all_carriers = sorted({c for yr in yr_by_scenario.values() for c in yr.capacity_by_carrier})
+        bottoms = np.zeros(len(names))
+        for carrier in all_carriers:
+            vals  = np.array([yr_by_scenario[n].capacity_by_carrier.get(carrier, 0) for n in names])
+            color = CARRIER_COLORS.get(carrier, "#808080")
+            self.scen_cap_ax.bar(x, vals, bottom=bottoms, label=carrier, color=color)
+            bottoms += vals
+        self.scen_cap_ax.set_title(self.tr("設備容量比較 ({year}年) [MW]").format(year=year))
+        self.scen_cap_ax.set_xticks(x)
+        self.scen_cap_ax.set_xticklabels(names, rotation=20, ha="right")
+        handles, labels = self.scen_cap_ax.get_legend_handles_labels()
+        if handles and labels:
+            self.scen_cap_ax.legend(fontsize=7, ncol=3, loc="upper left")
+        self.scen_cap_fig.canvas.draw()
+
+        scen_colors = plt.cm.tab10(np.linspace(0, 0.9, max(len(names), 1)))
+
+        # CO₂
+        co2_vals = [yr_by_scenario[n].co2_emissions for n in names]
+        self.scen_co2_ax.bar(x, co2_vals, color=scen_colors)
+        self.scen_co2_ax.set_title(self.tr("CO₂排出量比較 ({year}年) [tCO₂]").format(year=year))
+        self.scen_co2_ax.set_xticks(x)
+        self.scen_co2_ax.set_xticklabels(names, rotation=20, ha="right")
+        self.scen_co2_fig.canvas.draw()
+
+        # Total cost
+        cost_vals = [yr_by_scenario[n].objective for n in names]
+        self.scen_cost_ax.bar(x, cost_vals, color=scen_colors)
+        self.scen_cost_ax.set_title(self.tr("総コスト比較 ({year}年) [Currency]").format(year=year))
+        self.scen_cost_ax.set_xticks(x)
+        self.scen_cost_ax.set_xticklabels(names, rotation=20, ha="right")
+        self.scen_cost_fig.canvas.draw()
+
+        # LCOE and CO₂ intensity
+        lcoe_vals   = []
+        co2int_vals = []
+        for n in names:
+            yr = yr_by_scenario[n]
+            total_gen  = sum(yr.generation_by_carrier.values())
+            total_cost = sum(yr.capex_by_carrier.values()) + sum(yr.opex_by_carrier.values())
+            lcoe_vals.append(total_cost / total_gen if total_gen > 0 else 0.0)
+            co2int_vals.append(yr.co2_emissions * 1000 / total_gen if total_gen > 0 else 0.0)
+
+        self.scen_lcoe_ax.bar(x, lcoe_vals, color=scen_colors)
+        self.scen_lcoe_ax.set_title(self.tr("LCOE比較 ({year}年) [Currency/MWh]").format(year=year))
+        self.scen_lcoe_ax.set_xticks(x)
+        self.scen_lcoe_ax.set_xticklabels(names, rotation=20, ha="right")
+        self.scen_lcoe_fig.canvas.draw()
+
+        self.scen_co2int_ax.bar(x, co2int_vals, color=scen_colors)
+        self.scen_co2int_ax.set_title(self.tr("CO₂原単位比較 ({year}年) [gCO₂/kWh]").format(year=year))
+        self.scen_co2int_ax.set_xticks(x)
+        self.scen_co2int_ax.set_xticklabels(names, rotation=20, ha="right")
+        self.scen_co2int_fig.canvas.draw()
 
     # ── Dispatch simulation ───────────────────────────────────────────
     _BASE_DATE = datetime.datetime(2019, 1, 1)
@@ -786,7 +929,7 @@ class ResultsPanel(QWidget):
             if m > 0:
                 demand_neg = -np.maximum(demand[:m], 0.0)
                 ax.fill_between(h[:m], neg_bottom[:m], neg_bottom[:m] + demand_neg,
-                                alpha=0.85, color="firebrick", label="需要")
+                                alpha=0.85, color="#FF99CC", label="需要")
                 neg_bottom[:m] += demand_neg
 
         for label, color, arr in stor_charge_bands:

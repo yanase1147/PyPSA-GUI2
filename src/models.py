@@ -117,6 +117,7 @@ class Load:
     area: str
     p_set: float = 0.0
     bus_carrier: str = "AC"
+    demand_scale: float = 1.0  # プロファイルで需要をon/off・調整するための倍率（休眠コンポーネント用）
 
 
 @dataclass
@@ -251,7 +252,7 @@ class AreaRES:
 @dataclass
 class ComponentOverrideRule:
     """年ごとのコンポーネントパラメータ上書きルール（1レコード = 1年分）。"""
-    component_type: str   # "Generator" | "Store" | "PumpedHydro" | "Converter" | "Interconnection" | "CustomComponentInstance"
+    component_type: str   # "Generator" | "Store" | "PumpedHydro" | "Converter" | "Interconnection" | "Load" | "CustomComponentInstance"
     component_name: str
     parameter: str        # 例: "capital_cost", "efficiency"
     year: int
