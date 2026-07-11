@@ -279,6 +279,12 @@ def build_network(
         marg_cost    = gen.marginal_cost if gen.marginal_cost else costs.get("marginal_cost", 0.0)
         efficiency   = gen.efficiency    if gen.efficiency    else costs.get("efficiency",    1.0)
 
+        # ramp_limit が 1.0 (デフォルト・実質無制約) の場合は NaN を渡し、
+        # PyPSA がランプ制約行を生成しないようにする。
+        # 1.0 のまま渡すと全発電機 × 2 × 8760 の不要制約が追加されてしまう。
+        ramp_up   = gen.ramp_limit_up   if gen.ramp_limit_up   < 1.0 else np.nan
+        ramp_down = gen.ramp_limit_down if gen.ramp_limit_down < 1.0 else np.nan
+
         kwargs: dict = dict(
             bus=_bus_name(gen.area, gen.bus_carrier),
             carrier=gen.carrier,
@@ -293,8 +299,8 @@ def build_network(
             p_min_pu=gen.p_min_pu,
             committable=gen.committable,
             min_up_time=gen.min_up_time,
-            ramp_limit_up=gen.ramp_limit_up,
-            ramp_limit_down=gen.ramp_limit_down,
+            ramp_limit_up=ramp_up,
+            ramp_limit_down=ramp_down,
         )
 
         if gen.carrier in CF_CARRIERS:
@@ -678,6 +684,10 @@ def build_multi_period_network(
         marg_cost = gen.marginal_cost if gen.marginal_cost else costs.get("marginal_cost", 0.0)
         efficiency = gen.efficiency if gen.efficiency else costs.get("efficiency", 1.0)
 
+        # ramp_limit が 1.0 (デフォルト・実質無制約) の場合は NaN を渡す
+        ramp_up   = gen.ramp_limit_up   if gen.ramp_limit_up   < 1.0 else np.nan
+        ramp_down = gen.ramp_limit_down if gen.ramp_limit_down < 1.0 else np.nan
+
         kwargs: dict = dict(
             bus=_bus_name(gen.area, gen.bus_carrier),
             carrier=gen.carrier,
@@ -693,8 +703,8 @@ def build_multi_period_network(
             p_min_pu=gen.p_min_pu,
             committable=gen.committable,
             min_up_time=gen.min_up_time,
-            ramp_limit_up=gen.ramp_limit_up,
-            ramp_limit_down=gen.ramp_limit_down,
+            ramp_limit_up=ramp_up,
+            ramp_limit_down=ramp_down,
         )
 
         if gen.carrier in CF_CARRIERS:

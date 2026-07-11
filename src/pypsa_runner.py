@@ -44,6 +44,7 @@ class OptimizationWorker(QThread):
         output_dir: str | None = None,
         active_profiles: list[ScenarioProfile] | None = None,
         snapshot_step: int = 1,
+        solver_algorithm: str = "choose",
         parent=None,
     ):
         super().__init__(parent)
@@ -55,7 +56,20 @@ class OptimizationWorker(QThread):
         self._output_dir      = output_dir
         self._active_profiles = active_profiles or []
         self._snapshot_step   = max(1, snapshot_step)
+        self._solver_algorithm = solver_algorithm
         self._stop            = False
+
+    def _build_solver_opts(self) -> dict:
+        """HiGHS向けソルバーオプション。他ソルバー選択時はアルゴリズム指定を含めない。"""
+        opts = {
+            "simplex_scale_strategy": 2,
+            "simplex_crash_strategy": 9,  # reduce memory by using crash basis
+        }
+        if self._solver == "highs" and self._solver_algorithm != "choose":
+            # HiGHS: "solver" option selects the LP algorithm
+            # ("simplex" | "ipm" | "pdlp" | "choose"=auto)
+            opts["solver"] = self._solver_algorithm
+        return opts
 
     def stop(self):
         self._stop = True
@@ -113,11 +127,8 @@ class OptimizationWorker(QThread):
                 snapshot_step=self._snapshot_step,
             )
 
-            self._emit_log(f"ソルバー: {self._solver}  最適化開始…")
-            solver_opts = {
-                "simplex_scale_strategy": 2,
-                "simplex_crash_strategy": 9,
-            }
+            self._emit_log(f"ソルバー: {self._solver}  アルゴリズム: {self._solver_algorithm}  最適化開始…")
+            solver_opts = self._build_solver_opts()
             with redirect_stdout(buf), redirect_stderr(buf):
                 try:
                     status, cond = n.optimize(
@@ -242,12 +253,9 @@ class OptimizationWorker(QThread):
                               solver_name=self._solver,
                               snapshot_step=self._snapshot_step)
 
-            self._emit_log(f"[{year}] ソルバー: {self._solver}  最適化開始…")
+            self._emit_log(f"[{year}] ソルバー: {self._solver}  アルゴリズム: {self._solver_algorithm}  最適化開始…")
 
-            solver_opts = {
-                "simplex_scale_strategy": 2,
-                "simplex_crash_strategy": 9,  # reduce memory by using crash basis
-            }
+            solver_opts = self._build_solver_opts()
             with redirect_stdout(buf), redirect_stderr(buf):
                 status, cond = n.optimize(solver_name=self._solver,
                                           solver_options=solver_opts)

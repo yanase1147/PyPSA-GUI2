@@ -16,6 +16,14 @@ from .pypsa_runner import OptimizationWorker
 
 _SOLVERS = ["highs", "cplex", "gurobi", "glpk", "cbc"]
 
+# HiGHS の "solver" オプション値。"choose" はHiGHSによる自動選択。
+# 他ソルバー選択時はこの設定は無視される（HiGHS固有オプションのため）。
+_ALGORITHMS = [
+    ("自動 (Auto)", "choose"),
+    ("単体法 (Simplex)", "simplex"),
+    ("内点法 (IPM)", "ipm"),
+]
+
 
 class _YearSelectionDialog(QDialog):
     def __init__(self, scenario: ScenarioData, selected_years: set[int], parent=None):
@@ -98,6 +106,23 @@ class RunPanel(QWidget):
         self.solver_combo.addItems(_SOLVERS)
         solver_lay.addWidget(self.solver_combo)
         top_row.addWidget(solver_grp)
+
+        # Algorithm (HiGHS only: simplex / interior-point / auto)
+        algo_grp = QGroupBox(self.tr("アルゴリズム（HiGHS）"))
+        algo_lay = QHBoxLayout(algo_grp)
+        self.algorithm_combo = QComboBox()
+        for label, _value in _ALGORITHMS:
+            self.algorithm_combo.addItem(label)
+        self.algorithm_combo.setToolTip(
+            "HiGHSソルバーのLPアルゴリズムを選択します。\n"
+            "自動: HiGHSが問題の特性に応じて選択（既定）\n"
+            "単体法 (Simplex): 反復回数は多いが小〜中規模問題で安定\n"
+            "内点法 (IPM): 大規模問題で高速な場合があるが、厳密な基底解が必要な場合は\n"
+            "              単体法によるクロスオーバーが追加で必要になることがあります。\n"
+            "※ HiGHS以外のソルバーを選択した場合、この設定は適用されません。"
+        )
+        algo_lay.addWidget(self.algorithm_combo)
+        top_row.addWidget(algo_grp)
 
         # Time step
         from PyQt6.QtWidgets import QSpinBox as _QSpinBox
@@ -290,7 +315,8 @@ class RunPanel(QWidget):
             return
 
         solver = self.solver_combo.currentText()
-        self._append_log(f"\n開始: ソルバー={solver}  対象シナリオ={len(run_items)}")
+        algorithm = _ALGORITHMS[self.algorithm_combo.currentIndex()][1]
+        self._append_log(f"\n開始: ソルバー={solver}  アルゴリズム={algorithm}  対象シナリオ={len(run_items)}")
         self.btn_run.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.progress.setVisible(True)
@@ -302,6 +328,7 @@ class RunPanel(QWidget):
         snapshot_step  = self.snapshot_step_spin.value()
         self._run_options = {
             "solver": solver,
+            "algorithm": algorithm,
             "output_dir": output_dir,
             "snapshot_step": snapshot_step,
         }
@@ -329,6 +356,7 @@ class RunPanel(QWidget):
             output_dir=self._run_options["output_dir"],
             active_profiles=active_profiles,
             snapshot_step=self._run_options["snapshot_step"],
+            solver_algorithm=self._run_options["algorithm"],
             parent=self,
         )
         self._worker.log_line.connect(self._append_log)
