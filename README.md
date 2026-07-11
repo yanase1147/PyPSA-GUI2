@@ -17,6 +17,7 @@ PyPSA（Python for Power System Analysis）による電力・エネルギーシ�
 - **シナリオ管理**: CO2上限・炭素価格・キャリア別コストなどをプロファイルとして定義し、複数シナリオ・複数計画年に適用
 - **時系列データ**: 太陽光/風力/水力/バイオマスの容量係数、需要（負荷）の8760時間データを保持。RES構成エディタから編集するほか、Excelでの一括インポート/エクスポートにも対応
 - **最適化実行**: HiGHS / Gurobi / CPLEX などのソルバーでバッチ実行し、進捗ログを表示
+  - HiGHS選択時はアルゴリズム（自動 / 単体法 Simplex / 内点法 IPM）を切り替え可能
 - **結果ダッシュボード**: 設備容量・発電量・コスト内訳・稼働時系列・年次比較グラフを表示
 - **Excel入出力 / netCDF保存**: プロジェクト全体を Excel 1ファイルで保存・読込、最適化結果は netCDF で保存
 - **多言語対応**: Qt Linguist ベースの日英切り替え（`i18n.py` / `translations/`）
@@ -25,7 +26,9 @@ PyPSA（Python for Power System Analysis）による電力・エネルギーシ�
 
 - Python 3.11
 - PyQt6 / PyQt6-WebEngine
-- PyPSA ≥ 1.0（HiGHS 同梱、Gurobi / CPLEX は別途ライセンスがあれば利用可）
+- PyPSA ≥ 1.2.0（HiGHS 同梱、Gurobi / CPLEX は別途ライセンスがあれば利用可。
+  pandas ≥ 3.0 環境では、multi-period最適化でのxarrayアライメントエラーを回避するため
+  PyPSA 1.2.0 以降が必須）
 - pandas, numpy, openpyxl, netCDF4, xarray, matplotlib
 
 付属の [`environment.yml`](environment.yml) から conda 環境を作成:
