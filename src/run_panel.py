@@ -1,6 +1,8 @@
 """Run panel: solver selector, year checkboxes, run/stop buttons, log window."""
 from __future__ import annotations
 
+import datetime
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QComboBox,
     QCheckBox, QPushButton, QTextEdit, QLabel, QProgressBar, QLineEdit,
@@ -139,6 +141,49 @@ class RunPanel(QWidget):
         step_lay.addWidget(self.snapshot_step_spin)
         top_row.addWidget(step_grp)
 
+        # Calculation period (restrict optimization to a sub-range of the 8760h year)
+        period_grp = QGroupBox(self.tr("計算期間"))
+        period_lay = QHBoxLayout(period_grp)
+        self.period_start_spin = _QSpinBox()
+        self.period_start_spin.setRange(0, 8759)
+        self.period_start_spin.setValue(0)
+        self.period_end_spin = _QSpinBox()
+        self.period_end_spin.setRange(1, 8760)
+        self.period_end_spin.setValue(8760)
+        self.period_label = QLabel("")
+        period_lay.addWidget(self.period_start_spin)
+        period_lay.addWidget(QLabel(self.tr("〜")))
+        period_lay.addWidget(self.period_end_spin)
+        period_lay.addWidget(QLabel(self.tr("h")))
+        period_lay.addWidget(self.period_label)
+
+        btn_period_full  = QPushButton(self.tr("全期間"))
+        btn_period_month = QPushButton(self.tr("1ヶ月"))
+        btn_period_week  = QPushButton(self.tr("1週間"))
+        for b in (btn_period_full, btn_period_month, btn_period_week):
+            b.setFixedWidth(56)
+        btn_period_full.clicked.connect(lambda: self._set_period_range(0, 8760))
+        btn_period_month.clicked.connect(
+            lambda: self._set_period_range(self.period_start_spin.value(),
+                                            self.period_start_spin.value() + 730))
+        btn_period_week.clicked.connect(
+            lambda: self._set_period_range(self.period_start_spin.value(),
+                                            self.period_start_spin.value() + 168))
+        period_lay.addWidget(btn_period_full)
+        period_lay.addWidget(btn_period_month)
+        period_lay.addWidget(btn_period_week)
+
+        period_grp.setToolTip(
+            "最適化計算の対象期間を8760時間の一部（例: 1か月分）に制限します。\n"
+            "計算時間・メモリ使用量を大幅に削減できますが、蓄電池のSOC推移など\n"
+            "季節をまたぐ挙動の評価には向きません。年間CO2排出量上限などの制約も\n"
+            "選択した期間のみで評価されます。\n"
+            "0〜8760h（全期間）が既定値です。"
+        )
+        self.period_start_spin.valueChanged.connect(self._on_period_changed)
+        self.period_end_spin.valueChanged.connect(self._on_period_changed)
+        top_row.addWidget(period_grp)
+
         # Run / Stop
         btn_grp = QGroupBox(self.tr("実行"))
         btn_lay = QVBoxLayout(btn_grp)
@@ -192,6 +237,37 @@ class RunPanel(QWidget):
         btn_clear.clicked.connect(self.log_view.clear)
         log_lay.addWidget(btn_clear, alignment=Qt.AlignmentFlag.AlignRight)
         layout.addWidget(log_grp, stretch=1)
+
+        self._on_period_changed()
+
+    # ── Calculation period helpers ──────────────────────────────────────
+    _BASE_DATE = datetime.datetime(2019, 1, 1)
+
+    def _hour_to_date(self, h: int) -> str:
+        dt = self._BASE_DATE + datetime.timedelta(hours=int(h))
+        return dt.strftime("%m/%d %H:00")
+
+    def _set_period_range(self, start: int, end: int):
+        start = max(0, min(int(start), 8759))
+        end = max(start + 1, min(int(end), 8760))
+        self.period_start_spin.blockSignals(True)
+        self.period_end_spin.blockSignals(True)
+        self.period_start_spin.setValue(start)
+        self.period_end_spin.setValue(end)
+        self.period_start_spin.blockSignals(False)
+        self.period_end_spin.blockSignals(False)
+        self._on_period_changed()
+
+    def _on_period_changed(self):
+        start = self.period_start_spin.value()
+        end = self.period_end_spin.value()
+        if end <= start:
+            end = start + 1
+            self.period_end_spin.blockSignals(True)
+            self.period_end_spin.setValue(end)
+            self.period_end_spin.blockSignals(False)
+        self.period_label.setText(
+            f"({self._hour_to_date(start)} 〜 {self._hour_to_date(end)})")
 
     # ── Scenario selection helpers ────────────────────────────────────
     def _scenario_years_text(self, scenario_name: str) -> str:
@@ -272,7 +348,7 @@ class RunPanel(QWidget):
         self._scenario_year_selection.clear()
 
         for sc in self._scenarios:
-            self._scenario_enabled[sc.name] = prev_enabled.get(sc.name, True)
+            self._scenario_enabled[sc.name] = prev_enabled.get(sc.name, False)
             saved = prev_years.get(sc.name, set(sc.planning_years))
             self._scenario_year_selection[sc.name] = set(y for y in saved if y in set(sc.planning_years))
             if not self._scenario_year_selection[sc.name]:
@@ -317,6 +393,12 @@ class RunPanel(QWidget):
         solver = self.solver_combo.currentText()
         algorithm = _ALGORITHMS[self.algorithm_combo.currentIndex()][1]
         self._append_log(f"\n開始: ソルバー={solver}  アルゴリズム={algorithm}  対象シナリオ={len(run_items)}")
+        start_hour = self.period_start_spin.value()
+        end_hour   = self.period_end_spin.value()
+        if start_hour != 0 or end_hour != 8760:
+            self._append_log(
+                f"  計算期間: {self._hour_to_date(start_hour)} 〜 {self._hour_to_date(end_hour)} のみを対象に計算します。\n"
+                f"  ※ 年間CO2排出量上限などの制約もこの期間のみで評価されます。")
         self.btn_run.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.progress.setVisible(True)
@@ -331,6 +413,8 @@ class RunPanel(QWidget):
             "algorithm": algorithm,
             "output_dir": output_dir,
             "snapshot_step": snapshot_step,
+            "start_hour": start_hour,
+            "end_hour": end_hour,
         }
         self._start_next_worker()
 
@@ -356,6 +440,8 @@ class RunPanel(QWidget):
             output_dir=self._run_options["output_dir"],
             active_profiles=active_profiles,
             snapshot_step=self._run_options["snapshot_step"],
+            start_hour=self._run_options["start_hour"],
+            end_hour=self._run_options["end_hour"],
             solver_algorithm=self._run_options["algorithm"],
             parent=self,
         )

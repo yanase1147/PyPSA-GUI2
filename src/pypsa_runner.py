@@ -44,6 +44,8 @@ class OptimizationWorker(QThread):
         output_dir: str | None = None,
         active_profiles: list[ScenarioProfile] | None = None,
         snapshot_step: int = 1,
+        start_hour: int = 0,
+        end_hour: int = 8760,
         solver_algorithm: str = "choose",
         parent=None,
     ):
@@ -56,6 +58,8 @@ class OptimizationWorker(QThread):
         self._output_dir      = output_dir
         self._active_profiles = active_profiles or []
         self._snapshot_step   = max(1, snapshot_step)
+        self._start_hour      = max(0, min(int(start_hour), 8759))
+        self._end_hour        = max(self._start_hour + 1, min(int(end_hour), 8760))
         self._solver_algorithm = solver_algorithm
         self._stop            = False
 
@@ -73,6 +77,12 @@ class OptimizationWorker(QThread):
 
     def stop(self):
         self._stop = True
+
+    def _range_part(self) -> str:
+        """Filename suffix for a restricted calculation period (empty if full year)."""
+        if self._start_hour == 0 and self._end_hour == 8760:
+            return ""
+        return f"h{self._start_hour}-{self._end_hour}"
 
     # ------------------------------------------------------------------
     def run(self):
@@ -125,6 +135,8 @@ class OptimizationWorker(QThread):
                 active_profiles=self._active_profiles,
                 solver_name=self._solver,
                 snapshot_step=self._snapshot_step,
+                start_hour=self._start_hour,
+                end_hour=self._end_hour,
             )
 
             self._emit_log(f"ソルバー: {self._solver}  アルゴリズム: {self._solver_algorithm}  最適化開始…")
@@ -150,7 +162,7 @@ class OptimizationWorker(QThread):
                 self._emit_log(f"目的関数値（全期間合計）: {obj:,.0f} Currency")
 
                 for year in self._years:
-                    yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step))
+                    yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step), start_hour=self._start_hour)
                     yr.status = status_str
                     yr.objective = obj / len(self._years)
                     _extract_multi_period_year(n, yr, year)
@@ -163,7 +175,7 @@ class OptimizationWorker(QThread):
             else:
                 self._emit_log(f"最適化失敗: {status_str}")
                 for year in self._years:
-                    yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step))
+                    yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step), start_hour=self._start_hour)
                     yr.status = status_str
                     results.year_results.append(yr)
                     self.year_done.emit(year, yr)
@@ -181,7 +193,7 @@ class OptimizationWorker(QThread):
             self._emit_log(msg)
             full_log.append(msg)
             for year in self._years:
-                yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step))
+                yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step), start_hour=self._start_hour)
                 yr.status = "error"
                 results.year_results.append(yr)
                 self.year_done.emit(year, yr)
@@ -191,7 +203,7 @@ class OptimizationWorker(QThread):
             self._emit_log(f"エラー:\n{tb}")
             full_log.append(tb)
             for year in self._years:
-                yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step))
+                yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step), start_hour=self._start_hour)
                 yr.status = "error"
                 results.year_results.append(yr)
                 self.year_done.emit(year, yr)
@@ -212,6 +224,9 @@ class OptimizationWorker(QThread):
             step_part = f"step{max(1, int(self._snapshot_step))}"
             years_part = "-".join(str(y) for y in self._years)
             parts = ["result", sanitize(self._scenario.name), f"mp_{years_part}", step_part]
+            range_part = self._range_part()
+            if range_part:
+                parts.append(range_part)
             for p in self._active_profiles:
                 parts.append(sanitize(p.name))
             filename = "_".join(parts) + ".nc"
@@ -234,7 +249,7 @@ class OptimizationWorker(QThread):
 
     # ------------------------------------------------------------------
     def _run_year(self, year: int, full_log: list[str]) -> YearResult:
-        yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step))
+        yr = YearResult(year=year, snapshot_step=max(1, self._snapshot_step), start_hour=self._start_hour)
         buf = _LogBuffer(self._emit_log, full_log)
         log_handler = _QtLogHandler(self._emit_log, full_log)
         log_handler.setFormatter(logging.Formatter("%(name)s - %(levelname)s - %(message)s"))
@@ -251,7 +266,9 @@ class OptimizationWorker(QThread):
             n = build_network(self._network, self._scenario, self._timeseries,
                               year, active_profiles=self._active_profiles,
                               solver_name=self._solver,
-                              snapshot_step=self._snapshot_step)
+                              snapshot_step=self._snapshot_step,
+                              start_hour=self._start_hour,
+                              end_hour=self._end_hour)
 
             self._emit_log(f"[{year}] ソルバー: {self._solver}  アルゴリズム: {self._solver_algorithm}  最適化開始…")
 
@@ -312,6 +329,9 @@ class OptimizationWorker(QThread):
             return re.sub(r'[\\/:*?"<>|]', '_', s).strip('_ ') or "unnamed"
         step_part = f"step{max(1, int(self._snapshot_step))}"
         parts = ["result", sanitize(self._scenario.name), str(year), step_part]
+        range_part = self._range_part()
+        if range_part:
+            parts.append(range_part)
         for p in self._active_profiles:
             parts.append(sanitize(p.name))
         return "_".join(parts) + ".nc"
@@ -396,6 +416,38 @@ class _QtLogHandler(logging.Handler):
 # ======================================================================
 # Module-level extraction helpers (shared with results_panel for netCDF loading)
 # ======================================================================
+
+def _timestep_level(n):
+    """Return the (period-collapsed) DatetimeIndex of representative timesteps."""
+    import pandas as pd
+    snaps = n.snapshots
+    return snaps.get_level_values(-1) if isinstance(snaps, pd.MultiIndex) else snaps
+
+
+def infer_start_hour(n) -> int:
+    """Infer the start-of-year hour offset from a network's snapshots.
+
+    Used when reloading a netCDF result, where the start_hour used at build
+    time isn't stored explicitly but is recoverable from the first snapshot's
+    date relative to the fixed 2019-01-01 base used by build_network().
+    """
+    import pandas as pd
+    first = _timestep_level(n)[0]
+    delta_hours = (pd.Timestamp(first) - pd.Timestamp("2019-01-01")).total_seconds() / 3600
+    return max(0, int(round(delta_hours)))
+
+
+def infer_snapshot_step(n) -> int:
+    """Infer the snapshot_step (hours between consecutive snapshots) from a
+    network's snapshots. More robust than 8760 // count once the calculation
+    period can be a sub-range of the year (that division only holds for a
+    full year)."""
+    ts = _timestep_level(n)
+    if len(ts) < 2:
+        return 1
+    delta_hours = (ts[1] - ts[0]).total_seconds() / 3600
+    return max(1, int(round(delta_hours)))
+
 
 def extract_year_results(n, yr: YearResult) -> None:
     """Populate YearResult summary fields from an optimized pypsa.Network."""

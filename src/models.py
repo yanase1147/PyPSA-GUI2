@@ -530,6 +530,7 @@ class YearResult:
     year: int
     status: str = "unknown"           # "ok" | "infeasible" | "error"
     snapshot_step: int = 1            # hours per snapshot (1=hourly, 24=daily, ...)
+    start_hour: int = 0               # offset of the first snapshot within the 8760h year
     objective: float = 0.0            # total system cost (Currency)
     co2_emissions: float = 0.0        # tCO₂
     # capacity by carrier {carrier: MW}

@@ -26,7 +26,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from .models import OptimizationResults, YearResult, CARRIER_COLORS, CF_CARRIERS
-from .pypsa_runner import extract_year_results, extract_year_timeseries, _extract_multi_period_year
+from .pypsa_runner import (
+    extract_year_results, extract_year_timeseries, _extract_multi_period_year,
+    infer_start_hour, infer_snapshot_step,
+)
 
 
 class _SummaryWindow(QWidget):
@@ -90,6 +93,7 @@ class ResultsPanel(QWidget):
         self._summary_win: _SummaryWindow | None = None
         self._current_yr: YearResult | None = None
         self._current_snapshot_step: int = 1
+        self._current_start_hour: int = 0
         self._default_results_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results")
         self._setup_ui()
@@ -422,15 +426,15 @@ class ResultsPanel(QWidget):
 
                     if is_multi:
                         periods = sorted(n.investment_periods)
-                        n_snaps_per_period = len(n.snapshots) // len(periods) if len(periods) else 1
-                        step = max(1, 8760 // max(1, n_snaps_per_period))
+                        step = infer_snapshot_step(n)
+                        start_hr = infer_start_hour(n)
                         obj = 0.0
                         try:
                             obj = float(n.objective)
                         except Exception:
                             pass
                         for period in periods:
-                            yr = YearResult(year=int(period), snapshot_step=step)
+                            yr = YearResult(year=int(period), snapshot_step=step, start_hour=start_hr)
                             yr.status = "ok"
                             yr.objective = obj / len(periods)
                             _extract_multi_period_year(n, yr, int(period))
@@ -438,7 +442,8 @@ class ResultsPanel(QWidget):
                     else:
                         yr = YearResult(year=year)
                         yr.status = "ok"
-                        yr.snapshot_step = max(1, 8760 // max(1, len(n.snapshots)))
+                        yr.snapshot_step = infer_snapshot_step(n)
+                        yr.start_hour = infer_start_hour(n)
                         try:
                             yr.objective = float(n.objective)
                         except Exception:
@@ -783,6 +788,7 @@ class ResultsPanel(QWidget):
 
     def _sync_disp_controls(self, yr: YearResult):
         self._current_snapshot_step = max(1, getattr(yr, 'snapshot_step', 1))
+        self._current_start_hour = max(0, getattr(yr, 'start_hour', 0))
         max_points = max(1, self._series_len(yr))
         start = min(self.disp_start.value(), max_points - 1)
         end = min(self.disp_end.value(), max_points)
@@ -800,7 +806,8 @@ class ResultsPanel(QWidget):
         self._update_disp_date_labels()
 
     def _hour_to_date(self, h: int) -> str:
-        dt = self._BASE_DATE + datetime.timedelta(hours=int(h) * self._current_snapshot_step)
+        dt = self._BASE_DATE + datetime.timedelta(
+            hours=self._current_start_hour + int(h) * self._current_snapshot_step)
         return dt.strftime("%m/%d %H:00")
 
     def _update_disp_date_labels(self):
@@ -853,9 +860,10 @@ class ResultsPanel(QWidget):
         range_str = f"{self._hour_to_date(start)} 〜 {self._hour_to_date(end)}"
 
         _step = self._current_snapshot_step
+        _start_hour = self._current_start_hour
         def _fmt_hour(x, _):
             hi = int(x)
-            actual_hour = hi * _step
+            actual_hour = _start_hour + hi * _step
             if 0 <= actual_hour <= 8760:
                 dt = self._BASE_DATE + datetime.timedelta(hours=actual_hour)
                 return dt.strftime("%m/%d\n%H:00")
