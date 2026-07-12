@@ -178,12 +178,22 @@ class ResultsPanel(QWidget):
         gen_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         left.addWidget(gen_canvas, stretch=1)
 
-        # Generation mix pie
+        # Generation mix pie + Cost mix pie (side by side)
+        pie_row = QHBoxLayout()
+
         self.cost_fig = Figure(figsize=(5, 3), dpi=90, tight_layout=True)
         self.cost_ax  = self.cost_fig.add_subplot(111)
         cost_canvas = FigureCanvas(self.cost_fig)
         cost_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        left.addWidget(cost_canvas, stretch=1)
+        pie_row.addWidget(cost_canvas)
+
+        self.costmix_fig = Figure(figsize=(5, 3), dpi=90, tight_layout=True)
+        self.costmix_ax  = self.costmix_fig.add_subplot(111)
+        costmix_canvas = FigureCanvas(self.costmix_fig)
+        costmix_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        pie_row.addWidget(costmix_canvas)
+
+        left.addLayout(pie_row, stretch=1)
 
         # Summary table button
         btn_summary = QPushButton(self.tr("電源別サマリーを表示..."))
@@ -566,6 +576,22 @@ class ResultsPanel(QWidget):
                              autopct="%1.1f%%", startangle=90)
             self.cost_ax.set_title(self.tr("発電量内訳 ({year}年)").format(year=yr.year))
         self.cost_fig.canvas.draw()
+
+        # Cost mix pie (capex + opex by carrier)
+        self.costmix_ax.clear()
+        carriers_c = set(yr.capex_by_carrier) | set(yr.opex_by_carrier)
+        cost_by_carrier = {
+            c: yr.capex_by_carrier.get(c, 0.0) + yr.opex_by_carrier.get(c, 0.0)
+            for c in carriers_c
+        }
+        pos_c = [(c, v) for c, v in cost_by_carrier.items() if v > 0]
+        if pos_c:
+            labels, vals = zip(*pos_c)
+            pie_colors = [CARRIER_COLORS.get(c, "#808080") for c in labels]
+            self.costmix_ax.pie(vals, labels=labels, colors=pie_colors,
+                                 autopct="%1.1f%%", startangle=90)
+            self.costmix_ax.set_title(self.tr("コスト内訳 ({year}年)").format(year=yr.year))
+        self.costmix_fig.canvas.draw()
 
         # Table — ウィンドウが開いていれば自動更新
         self._current_yr = yr

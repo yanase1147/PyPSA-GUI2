@@ -449,6 +449,58 @@ def infer_snapshot_step(n) -> int:
     return max(1, int(round(delta_hours)))
 
 
+def _accumulate_storage_costs(n, yr: YearResult, period=None, period_slice=None) -> None:
+    """Add Store/Link (battery, pumped hydro, sector-coupling) cost into
+    capex_by_carrier/opex_by_carrier, bucketed by the storage's own carrier
+    (Store) or by the carrier of its non-AC-side bus (Link).
+
+    Generators are accounted for separately by the caller; this fills the
+    remaining gap for storage/sector-coupling technologies (e.g. batteries)
+    so capex/opex — and therefore LCOE — reflect their cost too. AC-AC links
+    (pure inter-area transmission) and non-AC/non-AC links are skipped since
+    they have no natural carrier bucket.
+    """
+    import pandas as pd
+    bus_carrier = n.buses["carrier"] if "carrier" in n.buses.columns else pd.Series(dtype=str)
+
+    def _period_vals(opt_series):
+        if period is not None and isinstance(opt_series, pd.DataFrame) and period in opt_series.index:
+            return opt_series.loc[period]
+        return opt_series
+
+    if not n.stores.empty:
+        e_nom_vals = _period_vals(n.stores.get("e_nom_opt", n.stores.get("e_nom", 0)))
+        for carrier in n.stores.carrier.unique():
+            mask = n.stores.carrier == carrier
+            cap_cost = float((n.stores.loc[mask, "capital_cost"] * e_nom_vals[mask]).sum())
+            if cap_cost:
+                label = carrier or "Other"
+                yr.capex_by_carrier[label] = yr.capex_by_carrier.get(label, 0) + cap_cost
+
+    if not n.links.empty:
+        p_nom_vals = _period_vals(n.links.get("p_nom_opt", n.links.get("p_nom", 0)))
+        links_p0 = n.links_t.p0 if hasattr(n, "links_t") and "p0" in n.links_t else None
+        if period_slice is not None and links_p0 is not None:
+            links_p0 = period_slice(links_p0)
+        for lk_name, lk in n.links.iterrows():
+            bus0_ac = bus_carrier.get(lk.bus0, "") == "AC"
+            bus1_ac = bus_carrier.get(lk.bus1, "") == "AC"
+            if bus0_ac == bus1_ac:
+                continue
+            other_bus = lk.bus1 if bus0_ac else lk.bus0
+            label = bus_carrier.get(other_bus, "") or "Other"
+
+            cap_cost = float(lk.get("capital_cost", 0.0)) * float(p_nom_vals.get(lk_name, 0.0))
+            if cap_cost:
+                yr.capex_by_carrier[label] = yr.capex_by_carrier.get(label, 0) + cap_cost
+
+            marg = float(lk.get("marginal_cost", 0.0))
+            if marg and links_p0 is not None and lk_name in links_p0.columns:
+                opex = float((links_p0[lk_name].abs() * marg).sum())
+                if opex:
+                    yr.opex_by_carrier[label] = yr.opex_by_carrier.get(label, 0) + opex
+
+
 def extract_year_results(n, yr: YearResult) -> None:
     """Populate YearResult summary fields from an optimized pypsa.Network."""
     # ── Generators ────────────────────────────────────────────────────
@@ -476,6 +528,9 @@ def extract_year_results(n, yr: YearResult) -> None:
             else:
                 opex = 0.0
             yr.opex_by_carrier[carrier] = yr.opex_by_carrier.get(carrier, 0) + opex
+
+    # ── Storage / sector-coupling capex+opex (batteries, pumped hydro, etc.) ──
+    _accumulate_storage_costs(n, yr)
 
     # ── CO₂ emissions ─────────────────────────────────────────────────
     total_co2 = 0.0
@@ -670,6 +725,9 @@ def _extract_multi_period_year(n, yr: YearResult, period: int) -> None:
             else:
                 opex = 0.0
             yr.opex_by_carrier[carrier] = yr.opex_by_carrier.get(carrier, 0) + opex
+
+    # ── Storage / sector-coupling capex+opex (batteries, pumped hydro, etc.) ──
+    _accumulate_storage_costs(n, yr, period=period, period_slice=_period_slice)
 
     # ── CO₂ emissions ─────────────────────────────────────────────────
     total_co2 = 0.0
