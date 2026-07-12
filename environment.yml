@@ -2,16 +2,19 @@ name: pypsa-gui2
 channels:
   - defaults
 dependencies:
-  - scipy=1.17.1
+  - python=3.11
+  - highspy=1.13.1
   - numpy=2.4.2
+  - pandas=3.0.3
+  - xarray=2026.4.0
+  - scipy=1.17.1
   - linopy=0.7.0
   - openpyxl=3.1.5
-  - xarray=2026.4.0
-  - highspy=1.13.1
-  - python=3.11
-  - pyqtwebengine=6.11.0
-  - pandas=3.0.3
   - netcdf4=1.7.3
   - matplotlib=3.10.8
   - pyqt=6.11.0
-prefix: C:\Users\takashi-yanase\AppData\Local\miniconda3\envs\pypsa-gui2
+  - pyqtwebengine=6.11.0
+  - pip
+  - pip:
+      - pypsa==1.2.4
+      - platformdirs==4.10.0
