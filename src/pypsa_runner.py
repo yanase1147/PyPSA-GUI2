@@ -147,6 +147,7 @@ class OptimizationWorker(QThread):
                         solver_name=self._solver,
                         solver_options=solver_opts,
                         multi_investment_periods=True,
+                        include_objective_constant=False,
                     )
                 except TypeError:
                     status, cond = n.optimize(
@@ -275,7 +276,8 @@ class OptimizationWorker(QThread):
             solver_opts = self._build_solver_opts()
             with redirect_stdout(buf), redirect_stderr(buf):
                 status, cond = n.optimize(solver_name=self._solver,
-                                          solver_options=solver_opts)
+                                          solver_options=solver_opts,
+                                          include_objective_constant=False)
 
             yr.status = str(status) if status else "unknown"
             self._emit_log(f"[{year}] ステータス: {yr.status}  条件: {cond}")

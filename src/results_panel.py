@@ -542,6 +542,63 @@ class ResultsPanel(QWidget):
             self._draw_single(yr)
             self._draw_dispatch(yr)
 
+    @staticmethod
+    def _pie_with_leader_labels(ax, vals, labels, colors, title):
+        """円グラフを描画し、ラベルは全て外側にリーダー線で引き出す。
+
+        小さいスライス（コスト内訳では化石燃料の燃料費に対し再エネの資本費が
+        非常に小さい）でもラベルが重ならず読めるようにするため。
+        """
+        total = sum(vals)
+        wedges, _ = ax.pie(vals, colors=colors, startangle=90)
+        ax.set_title(title)
+
+        bbox_props = dict(boxstyle="round,pad=0.25", fc="white", ec="0.6", lw=0.6, alpha=0.9)
+        arrow_props = dict(arrowstyle="-", color="0.4", lw=0.8)
+
+        # 各スライスの中心角からラベル引き出し位置(x, y, 角度)を計算し、
+        # 左右半分に振り分ける（円グラフの左右どちらにラベルを出すか）
+        anchors = []
+        for w in wedges:
+            ang = (w.theta2 - w.theta1) / 2.0 + w.theta1
+            x = np.cos(np.deg2rad(ang))
+            y = np.sin(np.deg2rad(ang))
+            anchors.append((x, y, ang))
+
+        MIN_GAP = 0.16  # ラベル同士の最小縦間隔（軸座標）
+        target_ys = [1.2 * y for _, y, _ in anchors]
+        for side in (1, -1):
+            idxs = [i for i, (x, _, _) in enumerate(anchors) if np.sign(x or 1) == side]
+            # 上から下へ（yの大きい順）並べ、重なる分だけ押し下げる
+            idxs.sort(key=lambda i: -anchors[i][1])
+            prev_y = None
+            for i in idxs:
+                ty = target_ys[i]
+                if prev_y is not None and ty > prev_y - MIN_GAP:
+                    ty = prev_y - MIN_GAP
+                prev_y = ty
+                target_ys[i] = ty
+
+        for i, (w, label, val) in enumerate(zip(wedges, labels, vals)):
+            x, y, ang = anchors[i]
+            target_y = target_ys[i]
+            ha = "left" if x >= 0 else "right"
+            connectionstyle = f"angle,angleA=0,angleB={ang}"
+            arrow_props = dict(arrow_props, connectionstyle=connectionstyle)
+            pct = val / total * 100 if total else 0.0
+            ax.annotate(
+                f"{label}  {pct:.1f}%",
+                xy=(x, y),
+                xytext=(1.3 * np.sign(x or 1), target_y),
+                horizontalalignment=ha,
+                verticalalignment="center",
+                fontsize=8,
+                bbox=bbox_props,
+                arrowprops=arrow_props,
+            )
+        ax.set_xlim(-1.9, 1.9)
+        ax.set_ylim(-1.6, 1.6)
+
     def _draw_single(self, yr: YearResult):
         colors = [CARRIER_COLORS.get(c, "#808080") for c in yr.capacity_by_carrier]
 
@@ -586,11 +643,12 @@ class ResultsPanel(QWidget):
         }
         pos_c = [(c, v) for c, v in cost_by_carrier.items() if v > 0]
         if pos_c:
+            pos_c.sort(key=lambda cv: -cv[1])
             labels, vals = zip(*pos_c)
             pie_colors = [CARRIER_COLORS.get(c, "#808080") for c in labels]
-            self.costmix_ax.pie(vals, labels=labels, colors=pie_colors,
-                                 autopct="%1.1f%%", startangle=90)
-            self.costmix_ax.set_title(self.tr("コスト内訳 ({year}年)").format(year=yr.year))
+            self._pie_with_leader_labels(
+                self.costmix_ax, vals, labels, pie_colors,
+                self.tr("コスト内訳 ({year}年)").format(year=yr.year))
         self.costmix_fig.canvas.draw()
 
         # Table — ウィンドウが開いていれば自動更新

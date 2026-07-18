@@ -388,6 +388,7 @@ def build_network(
             p_nom=ic.p_nom,
             p_min_pu=p_min_pu,
             p_nom_extendable=ic.p_nom_extendable,
+            p_nom_max=ic.p_nom_max if ic.p_nom_extendable else np.inf,
             capital_cost=_annualize(ic.capital_cost, scenario.discount_rate, ic_lt),
             marginal_cost=ic.marginal_cost,
             build_year=ic.build_year,
@@ -446,6 +447,7 @@ def build_network(
               bus=bus,
               e_nom=st.e_nom,
               e_nom_extendable=st.e_nom_extendable,
+              e_nom_max=st.e_nom_max if st.e_nom_extendable else np.inf,
               capital_cost=cap_cost,
               carrier=st.carrier if st.carrier else "other")
 
@@ -803,6 +805,7 @@ def build_multi_period_network(
             p_nom=ic.p_nom,
             p_min_pu=p_min_pu,
             p_nom_extendable=ic.p_nom_extendable,
+            p_nom_max=ic.p_nom_max if ic.p_nom_extendable else np.inf,
             capital_cost=ic.capital_cost,
             marginal_cost=ic.marginal_cost,
             build_year=ic.build_year,
@@ -863,6 +866,7 @@ def build_multi_period_network(
               bus=bus,
               e_nom=st.e_nom,
               e_nom_extendable=st.e_nom_extendable,
+              e_nom_max=st.e_nom_max if st.e_nom_extendable else np.inf,
               capital_cost=st.capital_cost,
               lifetime=st_lt,
               carrier=st.carrier if st.carrier else "other")
