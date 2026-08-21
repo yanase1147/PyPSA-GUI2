@@ -184,6 +184,11 @@ def _apply_overrides(component, component_type: str, overrides: dict):
     return comp
 
 
+def _slice_hours(values: list, start_hour: int, end_hour: int) -> list:
+    """Slice an hourly series (length N_HOURS) to the [start_hour, end_hour) window."""
+    return list(values[start_hour:end_hour])
+
+
 def _downsample_timeseries(values, step: int, *, mode: str = "mean") -> list[float]:
     """Downsample an hourly series by aggregating each step-sized block.
 
@@ -209,15 +214,23 @@ def build_network(
     active_profiles: List[ScenarioProfile] = None,
     solver_name: str = "highs",
     snapshot_step: int = 1,
+    start_hour: int = 0,
+    end_hour: int = N_HOURS,
 ) -> pypsa.Network:
-    """Return a pypsa.Network ready to be optimized for a single planning year."""
+    """Return a pypsa.Network ready to be optimized for a single planning year.
+
+    start_hour/end_hour restrict the optimization to a contiguous sub-range of
+    the 8760-hour year (e.g. one month), instead of always solving the full year.
+    """
     if active_profiles is None:
         active_profiles = []
     if snapshot_step < 1:
         snapshot_step = 1
+    start_hour = max(0, min(int(start_hour), N_HOURS - 1))
+    end_hour = max(start_hour + 1, min(int(end_hour), N_HOURS))
 
     n = pypsa.Network()
-    all_snapshots = pd.date_range("2019-01-01", periods=N_HOURS, freq="h")
+    all_snapshots = pd.date_range("2019-01-01", periods=N_HOURS, freq="h")[start_hour:end_hour]
     n.set_snapshots(all_snapshots[::snapshot_step])
     if snapshot_step > 1:
         n.snapshot_weightings = n.snapshot_weightings * snapshot_step
@@ -309,6 +322,7 @@ def build_network(
             if cf_vals and any(v != 0.0 for v in cf_vals):
                 if ts.ts_mode.get(gen.name, "cf") == "mw" and gen.p_nom > 0:
                     cf_vals = [v / gen.p_nom for v in cf_vals]
+                cf_vals = _slice_hours(cf_vals, start_hour, end_hour)
                 # Aggregate hourly CF to coarse snapshots instead of midnight-only sampling.
                 kwargs["p_max_pu"] = _downsample_timeseries(cf_vals, snapshot_step, mode="mean")
         else:
@@ -317,6 +331,7 @@ def build_network(
             if cf_vals and any(v != 0.0 for v in cf_vals):
                 if ts.ts_mode.get(gen.name, "cf") == "mw" and gen.p_nom > 0:
                     cf_vals = [v / gen.p_nom for v in cf_vals]
+                cf_vals = _slice_hours(cf_vals, start_hour, end_hour)
                 kwargs["p_max_pu"] = _downsample_timeseries(cf_vals, snapshot_step, mode="mean")
         # Apply fixed_output regardless of whether a CF timeseries exists
         if ts.fixed_output.get(gen.name, False):
@@ -373,6 +388,7 @@ def build_network(
             p_nom=ic.p_nom,
             p_min_pu=p_min_pu,
             p_nom_extendable=ic.p_nom_extendable,
+            p_nom_max=ic.p_nom_max if ic.p_nom_extendable else np.inf,
             capital_cost=_annualize(ic.capital_cost, scenario.discount_rate, ic_lt),
             marginal_cost=ic.marginal_cost,
             build_year=ic.build_year,
@@ -399,6 +415,7 @@ def build_network(
         load = _apply_overrides(load, "Load", overrides)
         bus = _bus_name(load.area, load.bus_carrier)
         demand_raw = ts.get_demand_for_load(load.area, load.name) or [load.p_set] * N_HOURS
+        demand_raw = _slice_hours(demand_raw, start_hour, end_hour)
         # Generate unique name if needed (allows same names in different areas)
         load_name_unique = _unique_component_name(n, "Load", load.name, scope_hint=load.area)
         p_set = _downsample_timeseries(demand_raw, snapshot_step, mode="mean")
@@ -430,6 +447,7 @@ def build_network(
               bus=bus,
               e_nom=st.e_nom,
               e_nom_extendable=st.e_nom_extendable,
+              e_nom_max=st.e_nom_max if st.e_nom_extendable else np.inf,
               capital_cost=cap_cost,
               carrier=st.carrier if st.carrier else "other")
 
@@ -584,17 +602,24 @@ def build_multi_period_network(
     active_profiles: List[ScenarioProfile] = None,
     solver_name: str = "highs",
     snapshot_step: int = 1,
+    start_hour: int = 0,
+    end_hour: int = N_HOURS,
 ) -> pypsa.Network:
     """Return a pypsa.Network with multi-period investment optimization (perfect foresight).
 
     All planning_years are embedded as investment_periods in a single network.
     PyPSA solves all periods simultaneously, linking investments across periods
     via build_year and lifetime constraints.
+
+    start_hour/end_hour restrict each period's representative snapshots to a
+    contiguous sub-range of the 8760-hour year (e.g. one month).
     """
     if active_profiles is None:
         active_profiles = []
     if snapshot_step < 1:
         snapshot_step = 1
+    start_hour = max(0, min(int(start_hour), N_HOURS - 1))
+    end_hour = max(start_hour + 1, min(int(end_hour), N_HOURS))
 
     planning_years = sorted(planning_years)
     if len(planning_years) < 2:
@@ -621,7 +646,8 @@ def build_multi_period_network(
     else:
         n.investment_period_weightings["objective"] = 1.0
 
-    representative_snapshots = pd.date_range("2019-01-01", periods=N_HOURS, freq="h")[::snapshot_step]
+    representative_snapshots = pd.date_range(
+        "2019-01-01", periods=N_HOURS, freq="h")[start_hour:end_hour][::snapshot_step]
 
     snapshots = pd.MultiIndex.from_product(
         [periods, representative_snapshots], names=["period", "timestep"]
@@ -713,6 +739,7 @@ def build_multi_period_network(
             if cf_vals and any(v != 0.0 for v in cf_vals):
                 if ts.ts_mode.get(gen.name, "cf") == "mw" and gen.p_nom > 0:
                     cf_vals = [v / gen.p_nom for v in cf_vals]
+                cf_vals = _slice_hours(cf_vals, start_hour, end_hour)
                 ds_vals = _downsample_timeseries(cf_vals, snapshot_step, mode="mean")
                 tiled = ds_vals * len(planning_years)
                 kwargs["p_max_pu"] = tiled
@@ -721,6 +748,7 @@ def build_multi_period_network(
             if cf_vals and any(v != 0.0 for v in cf_vals):
                 if ts.ts_mode.get(gen.name, "cf") == "mw" and gen.p_nom > 0:
                     cf_vals = [v / gen.p_nom for v in cf_vals]
+                cf_vals = _slice_hours(cf_vals, start_hour, end_hour)
                 ds_vals = _downsample_timeseries(cf_vals, snapshot_step, mode="mean")
                 tiled = ds_vals * len(planning_years)
                 kwargs["p_max_pu"] = tiled
@@ -777,6 +805,7 @@ def build_multi_period_network(
             p_nom=ic.p_nom,
             p_min_pu=p_min_pu,
             p_nom_extendable=ic.p_nom_extendable,
+            p_nom_max=ic.p_nom_max if ic.p_nom_extendable else np.inf,
             capital_cost=ic.capital_cost,
             marginal_cost=ic.marginal_cost,
             build_year=ic.build_year,
@@ -804,6 +833,7 @@ def build_multi_period_network(
             continue
         bus = _bus_name(load.area, load.bus_carrier)
         demand_raw = ts.get_demand_for_load(load.area, load.name) or [load.p_set] * N_HOURS
+        demand_raw = _slice_hours(demand_raw, start_hour, end_hour)
         ds_vals = _downsample_timeseries(demand_raw, snapshot_step, mode="mean")
         tiled: list = []
         for py in planning_years:
@@ -836,6 +866,7 @@ def build_multi_period_network(
               bus=bus,
               e_nom=st.e_nom,
               e_nom_extendable=st.e_nom_extendable,
+              e_nom_max=st.e_nom_max if st.e_nom_extendable else np.inf,
               capital_cost=st.capital_cost,
               lifetime=st_lt,
               carrier=st.carrier if st.carrier else "other")

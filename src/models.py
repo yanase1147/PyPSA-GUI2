@@ -105,6 +105,7 @@ class Interconnection:
     p_nom: float = 0.0
     p_nom_reverse: float = 0.0   # reverse-direction capacity [MW]; 0 = unidirectional
     p_nom_extendable: bool = False
+    p_nom_max: float = float("inf")
     capital_cost: float = 0.0
     marginal_cost: float = 0.0
     build_year: int = 2020
@@ -127,6 +128,7 @@ class Store:
     e_nom: float = 0.0
     carrier: str = ""
     e_nom_extendable: bool = False
+    e_nom_max: float = float("inf")
     capital_cost: float = 0.0
     lifetime: int = 0
 
@@ -181,6 +183,9 @@ AVAILABLE_EXPOSED_PARAMS: Dict[str, List[str]] = {
     "Link": [
         "p_nom", "p_nom_extendable", "p_nom_max", "efficiency", "efficiency2",
         "marginal_cost", "capital_cost", "build_year",
+    ],
+    "Interconnection": [
+        "p_nom", "p_nom_extendable", "p_nom_max", "capital_cost", "marginal_cost",
     ],
 }
 
@@ -530,6 +535,7 @@ class YearResult:
     year: int
     status: str = "unknown"           # "ok" | "infeasible" | "error"
     snapshot_step: int = 1            # hours per snapshot (1=hourly, 24=daily, ...)
+    start_hour: int = 0               # offset of the first snapshot within the 8760h year
     objective: float = 0.0            # total system cost (Currency)
     co2_emissions: float = 0.0        # tCO₂
     # capacity by carrier {carrier: MW}

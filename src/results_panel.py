@@ -26,7 +26,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 from .models import OptimizationResults, YearResult, CARRIER_COLORS, CF_CARRIERS
-from .pypsa_runner import extract_year_results, extract_year_timeseries, _extract_multi_period_year
+from .pypsa_runner import (
+    extract_year_results, extract_year_timeseries, _extract_multi_period_year,
+    infer_start_hour, infer_snapshot_step,
+)
 
 
 class _SummaryWindow(QWidget):
@@ -90,6 +93,7 @@ class ResultsPanel(QWidget):
         self._summary_win: _SummaryWindow | None = None
         self._current_yr: YearResult | None = None
         self._current_snapshot_step: int = 1
+        self._current_start_hour: int = 0
         self._default_results_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results")
         self._setup_ui()
@@ -174,12 +178,22 @@ class ResultsPanel(QWidget):
         gen_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         left.addWidget(gen_canvas, stretch=1)
 
-        # Generation mix pie
+        # Generation mix pie + Cost mix pie (side by side)
+        pie_row = QHBoxLayout()
+
         self.cost_fig = Figure(figsize=(5, 3), dpi=90, tight_layout=True)
         self.cost_ax  = self.cost_fig.add_subplot(111)
         cost_canvas = FigureCanvas(self.cost_fig)
         cost_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        left.addWidget(cost_canvas, stretch=1)
+        pie_row.addWidget(cost_canvas)
+
+        self.costmix_fig = Figure(figsize=(5, 3), dpi=90, tight_layout=True)
+        self.costmix_ax  = self.costmix_fig.add_subplot(111)
+        costmix_canvas = FigureCanvas(self.costmix_fig)
+        costmix_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        pie_row.addWidget(costmix_canvas)
+
+        left.addLayout(pie_row, stretch=1)
 
         # Summary table button
         btn_summary = QPushButton(self.tr("電源別サマリーを表示..."))
@@ -422,15 +436,15 @@ class ResultsPanel(QWidget):
 
                     if is_multi:
                         periods = sorted(n.investment_periods)
-                        n_snaps_per_period = len(n.snapshots) // len(periods) if len(periods) else 1
-                        step = max(1, 8760 // max(1, n_snaps_per_period))
+                        step = infer_snapshot_step(n)
+                        start_hr = infer_start_hour(n)
                         obj = 0.0
                         try:
                             obj = float(n.objective)
                         except Exception:
                             pass
                         for period in periods:
-                            yr = YearResult(year=int(period), snapshot_step=step)
+                            yr = YearResult(year=int(period), snapshot_step=step, start_hour=start_hr)
                             yr.status = "ok"
                             yr.objective = obj / len(periods)
                             _extract_multi_period_year(n, yr, int(period))
@@ -438,7 +452,8 @@ class ResultsPanel(QWidget):
                     else:
                         yr = YearResult(year=year)
                         yr.status = "ok"
-                        yr.snapshot_step = max(1, 8760 // max(1, len(n.snapshots)))
+                        yr.snapshot_step = infer_snapshot_step(n)
+                        yr.start_hour = infer_start_hour(n)
                         try:
                             yr.objective = float(n.objective)
                         except Exception:
@@ -527,6 +542,63 @@ class ResultsPanel(QWidget):
             self._draw_single(yr)
             self._draw_dispatch(yr)
 
+    @staticmethod
+    def _pie_with_leader_labels(ax, vals, labels, colors, title):
+        """円グラフを描画し、ラベルは全て外側にリーダー線で引き出す。
+
+        小さいスライス（コスト内訳では化石燃料の燃料費に対し再エネの資本費が
+        非常に小さい）でもラベルが重ならず読めるようにするため。
+        """
+        total = sum(vals)
+        wedges, _ = ax.pie(vals, colors=colors, startangle=90)
+        ax.set_title(title)
+
+        bbox_props = dict(boxstyle="round,pad=0.25", fc="white", ec="0.6", lw=0.6, alpha=0.9)
+        arrow_props = dict(arrowstyle="-", color="0.4", lw=0.8)
+
+        # 各スライスの中心角からラベル引き出し位置(x, y, 角度)を計算し、
+        # 左右半分に振り分ける（円グラフの左右どちらにラベルを出すか）
+        anchors = []
+        for w in wedges:
+            ang = (w.theta2 - w.theta1) / 2.0 + w.theta1
+            x = np.cos(np.deg2rad(ang))
+            y = np.sin(np.deg2rad(ang))
+            anchors.append((x, y, ang))
+
+        MIN_GAP = 0.16  # ラベル同士の最小縦間隔（軸座標）
+        target_ys = [1.2 * y for _, y, _ in anchors]
+        for side in (1, -1):
+            idxs = [i for i, (x, _, _) in enumerate(anchors) if np.sign(x or 1) == side]
+            # 上から下へ（yの大きい順）並べ、重なる分だけ押し下げる
+            idxs.sort(key=lambda i: -anchors[i][1])
+            prev_y = None
+            for i in idxs:
+                ty = target_ys[i]
+                if prev_y is not None and ty > prev_y - MIN_GAP:
+                    ty = prev_y - MIN_GAP
+                prev_y = ty
+                target_ys[i] = ty
+
+        for i, (w, label, val) in enumerate(zip(wedges, labels, vals)):
+            x, y, ang = anchors[i]
+            target_y = target_ys[i]
+            ha = "left" if x >= 0 else "right"
+            connectionstyle = f"angle,angleA=0,angleB={ang}"
+            arrow_props = dict(arrow_props, connectionstyle=connectionstyle)
+            pct = val / total * 100 if total else 0.0
+            ax.annotate(
+                f"{label}  {pct:.1f}%",
+                xy=(x, y),
+                xytext=(1.3 * np.sign(x or 1), target_y),
+                horizontalalignment=ha,
+                verticalalignment="center",
+                fontsize=8,
+                bbox=bbox_props,
+                arrowprops=arrow_props,
+            )
+        ax.set_xlim(-1.9, 1.9)
+        ax.set_ylim(-1.6, 1.6)
+
     def _draw_single(self, yr: YearResult):
         colors = [CARRIER_COLORS.get(c, "#808080") for c in yr.capacity_by_carrier]
 
@@ -561,6 +633,23 @@ class ResultsPanel(QWidget):
                              autopct="%1.1f%%", startangle=90)
             self.cost_ax.set_title(self.tr("発電量内訳 ({year}年)").format(year=yr.year))
         self.cost_fig.canvas.draw()
+
+        # Cost mix pie (capex + opex by carrier)
+        self.costmix_ax.clear()
+        carriers_c = set(yr.capex_by_carrier) | set(yr.opex_by_carrier)
+        cost_by_carrier = {
+            c: yr.capex_by_carrier.get(c, 0.0) + yr.opex_by_carrier.get(c, 0.0)
+            for c in carriers_c
+        }
+        pos_c = [(c, v) for c, v in cost_by_carrier.items() if v > 0]
+        if pos_c:
+            pos_c.sort(key=lambda cv: -cv[1])
+            labels, vals = zip(*pos_c)
+            pie_colors = [CARRIER_COLORS.get(c, "#808080") for c in labels]
+            self._pie_with_leader_labels(
+                self.costmix_ax, vals, labels, pie_colors,
+                self.tr("コスト内訳 ({year}年)").format(year=yr.year))
+        self.costmix_fig.canvas.draw()
 
         # Table — ウィンドウが開いていれば自動更新
         self._current_yr = yr
@@ -783,6 +872,7 @@ class ResultsPanel(QWidget):
 
     def _sync_disp_controls(self, yr: YearResult):
         self._current_snapshot_step = max(1, getattr(yr, 'snapshot_step', 1))
+        self._current_start_hour = max(0, getattr(yr, 'start_hour', 0))
         max_points = max(1, self._series_len(yr))
         start = min(self.disp_start.value(), max_points - 1)
         end = min(self.disp_end.value(), max_points)
@@ -800,7 +890,8 @@ class ResultsPanel(QWidget):
         self._update_disp_date_labels()
 
     def _hour_to_date(self, h: int) -> str:
-        dt = self._BASE_DATE + datetime.timedelta(hours=int(h) * self._current_snapshot_step)
+        dt = self._BASE_DATE + datetime.timedelta(
+            hours=self._current_start_hour + int(h) * self._current_snapshot_step)
         return dt.strftime("%m/%d %H:00")
 
     def _update_disp_date_labels(self):
@@ -853,9 +944,10 @@ class ResultsPanel(QWidget):
         range_str = f"{self._hour_to_date(start)} 〜 {self._hour_to_date(end)}"
 
         _step = self._current_snapshot_step
+        _start_hour = self._current_start_hour
         def _fmt_hour(x, _):
             hi = int(x)
-            actual_hour = hi * _step
+            actual_hour = _start_hour + hi * _step
             if 0 <= actual_hour <= 8760:
                 dt = self._BASE_DATE + datetime.timedelta(hours=actual_hour)
                 return dt.strftime("%m/%d\n%H:00")
