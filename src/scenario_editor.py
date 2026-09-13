@@ -257,11 +257,11 @@ class ScenarioEditor(QWidget):
         form.addRow(yr_h)
 
         self.sc_multi_period = QCheckBox(self.tr("完全予見（multi-period）最適化"))
-        self.sc_multi_period.setToolTip(
+        self.sc_multi_period.setToolTip(self.tr(
             "有効にすると、全計画年を1つのネットワークとして同時最適化します。\n"
             "投資期間間の設備退役・追加が最適化されます（計画年が2つ以上必要）。\n"
             "注意: メモリ・計算時間が大幅に増加します。"
-        )
+        ))
         form.addRow(self.tr("最適化モード:"), self.sc_multi_period)
 
         self.sc_name.editingFinished.connect(self._save_scenario_fields)
@@ -389,7 +389,7 @@ class ScenarioEditor(QWidget):
         w = QWidget()
         v = QVBoxLayout(w)
 
-        self._profile_label = QLabel("（プロファイルを選択してください）")
+        self._profile_label = QLabel(self.tr("（プロファイルを選択してください）"))
         v.addWidget(self._profile_label)
 
         self.rule_table = QTableWidget(0, 5)
@@ -597,7 +597,7 @@ class ScenarioEditor(QWidget):
 
     def _populate_profile_detail(self, row: int):
         if row < 0 or row >= len(self._net.scenario_profiles):
-            self._profile_label.setText("（プロファイルを選択してください）")
+            self._profile_label.setText(self.tr("（プロファイルを選択してください）"))
             self.co2_table.setRowCount(0)
             self.rule_table.setRowCount(0)
             self._populate_carrier_table_from({})
@@ -697,11 +697,11 @@ class ScenarioEditor(QWidget):
     def _add_co2_row(self):
         p = self._current_profile()
         if p is None:
-            QMessageBox.information(self, "情報", "プロファイルを選択してください。")
+            QMessageBox.information(self, self.tr("情報"), self.tr("プロファイルを選択してください。"))
             return
         year = self.co2_new_year.value()
         if year in p.co2_settings:
-            QMessageBox.warning(self, "警告", f"{year}年は既に設定されています。")
+            QMessageBox.warning(self, self.tr("警告"), self.tr("{}年は既に設定されています。").format(year))
             return
         p.co2_settings[year] = {"co2_limit": 1e18, "co2_price": 0.0}
         self._populate_co2_table(p)
@@ -770,7 +770,7 @@ class ScenarioEditor(QWidget):
     def _add_rule(self):
         p = self._current_profile()
         if p is None:
-            QMessageBox.information(self, "情報", "プロファイルを選択してください。")
+            QMessageBox.information(self, self.tr("情報"), self.tr("プロファイルを選択してください。"))
             return
         dlg = RuleDialog(self, network=self._net)
         if dlg.exec() == QDialog.DialogCode.Accepted:

@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QGraphicsEllipseItem, QGraphicsPathItem,
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMenu,
 )
-from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
+from PyQt6.QtCore import Qt, QRectF, QPointF, QCoreApplication, pyqtSignal
 from PyQt6.QtGui import (
     QPainter, QPainterPath, QPen, QBrush, QColor, QFont, QTransform,
 )
@@ -287,7 +287,8 @@ class ExternalBusItem(QGraphicsItem):
                          f"area:{self.carrier}")
         font.setBold(False); font.setPointSize(7); painter.setFont(font)
         painter.drawText(QRectF(0, 36, NODE_W, 20),
-                         Qt.AlignmentFlag.AlignCenter, "(エリアバス)")
+                         Qt.AlignmentFlag.AlignCenter,
+                         QCoreApplication.translate("ExternalBusItem", "(エリアバス)"))
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
@@ -426,7 +427,8 @@ class NodeGraphScene(QGraphicsScene):
             for slot in required_slots.get(ct, []):
                 if slot not in node.sub.bus_connections:
                     errors.append(
-                        f"「{node.sub.name_template}」の {slot} ポートが未接続です")
+                        self.tr("「{}」の {} ポートが未接続です").format(
+                            node.sub.name_template, slot))
 
         # carrier compatibility warning
         for edge in self._edges:
@@ -443,8 +445,8 @@ class NodeGraphScene(QGraphicsScene):
                 gen_carrier = slot_node.sub.fixed_params.get("carrier", "")
                 if gen_carrier and bus_carrier and gen_carrier != bus_carrier:
                     errors.append(
-                        f"「{slot_node.sub.name_template}」のキャリア({gen_carrier})"
-                        f"がバスのキャリア({bus_carrier})と不一致です")
+                        self.tr("「{}」のキャリア({})がバスのキャリア({})と不一致です").format(
+                            slot_node.sub.name_template, gen_carrier, bus_carrier))
         return errors
 
     # ── selection signal ──────────────────────────────────────────────
@@ -556,7 +558,7 @@ class NodeGraphScene(QGraphicsScene):
 
     def _show_item_context_menu(self, item, global_pos):
         menu = QMenu()
-        del_act = menu.addAction("削除")
+        del_act = menu.addAction(self.tr("削除"))
         act = menu.exec(global_pos)
         if act == del_act:
             if isinstance(item, NodeItem):
@@ -754,24 +756,24 @@ class NodeGraphWidget(QWidget):
         lay.setSpacing(2)
 
         bar = QHBoxLayout()
-        for label, ct in [("Bus追加", "Bus"), ("Store追加", "Store"),
-                          ("Link追加", "Link"), ("Gen追加", "Generator")]:
+        for label, ct in [(self.tr("Bus追加"), "Bus"), (self.tr("Store追加"), "Store"),
+                          (self.tr("Link追加"), "Link"), (self.tr("Gen追加"), "Generator")]:
             btn = QPushButton(label)
             btn.setFixedHeight(26)
             btn.clicked.connect(lambda _, t=ct: self._on_add(t))
             bar.addWidget(btn)
 
-        btn_area = QPushButton("エリアバス追加")
+        btn_area = QPushButton(self.tr("エリアバス追加"))
         btn_area.setFixedHeight(26)
         btn_area.clicked.connect(self._area_bus_menu)
         bar.addWidget(btn_area)
 
-        btn_del = QPushButton("選択削除")
+        btn_del = QPushButton(self.tr("選択削除"))
         btn_del.setFixedHeight(26)
         btn_del.clicked.connect(self._delete_selected)
         bar.addWidget(btn_del)
 
-        btn_fit = QPushButton("全体表示")
+        btn_fit = QPushButton(self.tr("全体表示"))
         btn_fit.setFixedHeight(26)
         btn_fit.clicked.connect(self._view.fit_all)
         bar.addWidget(btn_fit)

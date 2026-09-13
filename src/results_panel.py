@@ -400,7 +400,7 @@ class ResultsPanel(QWidget):
         try:
             import pypsa
         except ImportError:
-            QMessageBox.critical(self, self.tr("エラー"), "PyPSA がインストールされていません。")
+            QMessageBox.critical(self, self.tr("エラー"), self.tr("PyPSA がインストールされていません。"))
             return
 
         # ファイルをシナリオ名でグルーピング
@@ -471,8 +471,8 @@ class ResultsPanel(QWidget):
 
         if all_errors:
             QMessageBox.warning(
-                self, "読み込みエラー",
-                "一部のファイルで読み込みに失敗しました:\n\n" + "\n\n".join(all_errors),
+                self, self.tr("読み込みエラー"),
+                self.tr("一部のファイルで読み込みに失敗しました:\n\n") + "\n\n".join(all_errors),
             )
 
         if all_scenarios:

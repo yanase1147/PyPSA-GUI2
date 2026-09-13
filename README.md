@@ -1,10 +1,15 @@
 # PyPSA-GUI2
 
+[日本語](#日本語) | [English](#english)
+
+<a id="日本語"></a>
+## 日本語
+
 PyPSA（Python for Power System Analysis）による電力・エネルギーシステムのモデル構築と最適化を、GUI 上で行うためのデスクトップアプリケーション（PyQt6 製）。
 
 複数エリア（地域）にまたがるエネルギーシステムを、TIMES 由来の Reference Energy System（RES）記法で自由に構築し、PyPSA で容量拡張・運用最適化を実行、複数シナリオの結果を比較できることを目指す。詳細な機能仕様は [`PyPSA-GUI_仕様書.md`](PyPSA-GUI_仕様書.md) を参照。
 
-## 主な機能
+### 主な機能
 
 - **エリア間概観（地図表示）**: OpenStreetMap タイル上にエリアと連系線を配置（`map_bridge.py` / Leaflet）
 - **RES構成エディタ**: エリアごとのエネルギーシステム（発電機・需要・貯蔵・揚水発電・変換器）を構成図として編集
@@ -22,7 +27,7 @@ PyPSA（Python for Power System Analysis）による電力・エネルギーシ�
 - **Excel入出力 / netCDF保存**: プロジェクト全体を Excel 1ファイルで保存・読込、最適化結果は netCDF で保存
 - **多言語対応**: Qt Linguist ベースの日英切り替え（`i18n.py` / `translations/`）
 
-## 動作環境
+### 動作環境
 
 - Python 3.11
 - PyQt6 / PyQt6-WebEngine
@@ -38,7 +43,7 @@ conda env create -f environment.yml
 conda activate pypsa-gui2
 ```
 
-## 実行方法
+### 実行方法
 
 ```bash
 python main.py
@@ -46,7 +51,7 @@ python main.py
 
 起動時に `project.xlsx`（存在すれば）を自動で読み込む。新規プロジェクトの作成・保存・読込はメニューから行う。
 
-## プロジェクト構成
+### プロジェクト構成
 
 ```
 main.py                        アプリケーションエントリポイント
@@ -70,7 +75,7 @@ src/
 translations/                  Qt Linguist 翻訳ファイル (.ts/.qm)
 ```
 
-## 開発状況
+### 開発状況
 
 `PyPSA-GUI_仕様書.md` の優先順位（7章）に沿って段階的に拡張中。
 
@@ -84,3 +89,93 @@ translations/                  Qt Linguist 翻訳ファイル (.ts/.qm)
 - [x] 単位変換ツール（RES編集画面の容量/エネルギー入力欄が対象。建設費/変動費や
       コンポーネントテンプレート・シナリオオーバーライドの単位切替は対象外）
 - [ ] エリア間概観の潮流フロー可視化
+
+---
+
+<a id="english"></a>
+## English
+
+A PyQt6 desktop application for building and optimizing power/energy system models with PyPSA (Python for Power System Analysis), entirely through a GUI.
+
+The goal is to let you freely build multi-area energy systems using a TIMES-style Reference Energy System (RES) notation, run capacity-expansion / operational optimization with PyPSA, and compare results across multiple scenarios. For detailed functional specifications, see [`PyPSA-GUI_仕様書.md`](PyPSA-GUI_仕様書.md) (Japanese only).
+
+### Key Features
+
+- **Area overview (map view)**: place areas and interconnections on OpenStreetMap tiles (`map_bridge.py` / Leaflet)
+- **RES configuration editor**: edit each area's energy system (generators, demand, storage, pumped hydro, converters) as a diagram
+  - Add components from the left side panel across 5 categories: Primary Resource / Conversion Process / Demand / Energy Storage / Carrier Management
+  - Right-click a node on the diagram to edit or delete it; double-click for detailed editing
+  - A warning banner flags components connected to a carrier with no supply source
+  - From the Generator and Load edit dialogs, click "Edit Time Series…" to edit 8760-hour data directly per component (data is scoped independently per area even for identically-named components)
+  - Capacity/energy-capacity input fields for generators, loads, storage, pumped hydro, converters, and interconnections have a unit-switching combo box (power: W/kW/MW/GW; energy: Wh/kWh/MWh/GWh/PJ/toe). Internal data is always kept in MW/MWh (`unit_widgets.py`)
+- **Component templates**: define reusable compound components — batteries, hydrogen tanks, pumped hydro, etc. — as combinations of `Bus`/`Store`/`Link`/`Generator` (`node_graph.py` + `component_template_editor.py`)
+- **Scenario management**: define CO2 caps, carbon prices, per-carrier costs, etc. as profiles and apply them across multiple scenarios and planning years
+- **Time series data**: holds 8760-hour capacity-factor data for solar/wind/hydro/biomass and demand (load); editable from the RES configuration editor, with bulk Excel import/export also supported
+- **Run optimization**: batch-run with solvers such as HiGHS / Gurobi / CPLEX, with progress logging
+  - When HiGHS is selected, choose the algorithm (Automatic / Simplex / Interior Point (IPM))
+- **Results dashboard**: view installed capacity, generation, cost breakdown, dispatch time series, and year-over-year comparison charts
+- **Excel import/export / netCDF save**: save/load an entire project as a single Excel file; optimization results are saved as netCDF
+- **Multi-language support**: Japanese/English switching based on Qt Linguist (`i18n.py` / `translations/`)
+
+### Requirements
+
+- Python 3.11
+- PyQt6 / PyQt6-WebEngine
+- PyPSA ≥ 1.2.0 (HiGHS bundled; Gurobi / CPLEX can be used with a separate license.
+  On pandas ≥ 3.0, PyPSA 1.2.0 or later is required to avoid an xarray alignment
+  error during multi-period optimization)
+- pandas, numpy, openpyxl, netCDF4, xarray, matplotlib
+
+Create the conda environment from the included [`environment.yml`](environment.yml):
+
+```bash
+conda env create -f environment.yml
+conda activate pypsa-gui2
+```
+
+### Running
+
+```bash
+python main.py
+```
+
+On startup, `project.xlsx` is loaded automatically if present. Creating, saving, and loading projects is done from the menu.
+
+### Project Structure
+
+```
+main.py                        Application entry point
+src/
+  main_window.py               Main window / screen navigation
+  network_editor.py            Area/RES editing screen (map, RES diagram, component tables)
+  unit_widgets.py               Unit-switching widgets for capacity/energy input fields (MW/MWh base, W-GW / Wh-PJ/toe)
+  node_graph.py                Node-graph editor for component templates
+  component_template_editor.py Editor for compound component (Bus/Store/Link/Generator) definitions
+  map_bridge.py                Signal bridge to the map (Leaflet)
+  models.py                    Data models (Area / Generator / Load / Store / Scenario, etc.)
+  network_manager.py           Network data management
+  config_generator.py          GUI data -> pypsa.Network conversion
+  pypsa_runner.py               Optimization worker and result extraction
+  run_panel.py                  Run-queue UI
+  results_panel.py              Results comparison dashboard
+  scenario_editor.py            Scenario / profile editing
+  timeseries_editor.py          Internal store for time series data (CF, demand) + bulk Excel I/O (used from the RES editing screen in the UI)
+  excel_handler.py              Excel import/export
+  i18n.py                        Multi-language support
+translations/                  Qt Linguist translation files (.ts/.qm)
+```
+
+### Development Status
+
+Being extended incrementally, following the priority order in section 7 of `PyPSA-GUI_仕様書.md`.
+
+- [x] Interactive RES configuration editor (add from left palette, right-click edit/delete, unconnected-component warnings)
+- [x] Demand (Load) time series editing in the RES editing screen (scoped by area + load name, symmetric with generators)
+- [ ] Explicit resource Bus+Store for primary resources — on hold: confirmed that PyPSA/linopy's internal constraint
+      generation changes optimization results for networks with multiple extendable, unconnected areas
+      (the conversion formula itself has been validated). The existing `Generator`-based PyPSA output is unchanged.
+- [ ] Parallelizing the run queue / IIS diagnostics
+- [ ] Generic scatter plots / delta display for the results comparison dashboard
+- [x] Unit conversion tool (applies to capacity/energy input fields in the RES editing screen; does not cover
+      capital/marginal cost unit switching or component templates / scenario overrides)
+- [ ] Power-flow visualization for the area overview

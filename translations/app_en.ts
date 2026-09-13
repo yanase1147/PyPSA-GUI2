@@ -33,6 +33,15 @@
     <message><source>netCDF結果ファイルを開く</source><translation>Open netCDF Result Files</translation></message>
     <message><source>言語を変更しました。アプリを再起動すると反映されます。</source><translation>Language changed. Please restart the application to apply.</translation></message>
     <message><source>言語設定</source><translation>Language Settings</translation></message>
+    <message><source>読み込みに失敗しました:
+</source><translation>Failed to load:
+</translation></message>
+    <message><source>プロジェクトを保存しました:
+</source><translation>Project saved:
+</translation></message>
+    <message><source>保存に失敗しました:
+</source><translation>Failed to save:
+</translation></message>
 </context>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -63,6 +72,38 @@
     <message><source>ERROR: プロジェクトデータが設定されていません。</source><translation>ERROR: Project data is not set.</translation></message>
     <message><source>実行対象がありません。シナリオと計画年を選択してください。</source><translation>No targets selected. Please choose a scenario and planning years.</translation></message>
     <message><source>大規模モデルでメモリ不足が発生する場合は大きい値に設定してください。</source><translation>Increase this value if memory errors occur with large models.</translation></message>
+    <message><source>アルゴリズム（HiGHS）</source><translation>Algorithm (HiGHS)</translation></message>
+    <message><source>計算期間</source><translation>Calculation Period</translation></message>
+    <message><source>
+最適化完了。「結果」タブで確認してください。</source><translation>
+Optimization complete. Please check the "Results" tab.</translation></message>
+    <message><source>全期間</source><translation>Full Period</translation></message>
+    <message><source>1ヶ月</source><translation>1 Month</translation></message>
+    <message><source>1週間</source><translation>1 Week</translation></message>
+    <message><source>HiGHSソルバーのLPアルゴリズムを選択します。
+自動: HiGHSが問題の特性に応じて選択（既定）
+単体法 (Simplex): 反復回数は多いが小〜中規模問題で安定
+内点法 (IPM): 大規模問題で高速な場合があるが、厳密な基底解が必要な場合は
+              単体法によるクロスオーバーが追加で必要になることがあります。
+※ HiGHS以外のソルバーを選択した場合、この設定は適用されません。</source><translation>Select the LP algorithm used by the HiGHS solver.
+Auto: HiGHS chooses based on the problem's characteristics (default)
+Simplex: more iterations, but stable for small-to-medium problems
+Interior Point (IPM): can be faster for large problems, but if an exact
+              basic solution is required, an extra simplex crossover may be needed.
+* This setting has no effect if a solver other than HiGHS is selected.</translation></message>
+    <message><source>1=全8760時間（最高精度）、2=4380時間、24=365時間（1日1点）
+大規模モデルでメモリ不足が発生する場合は大きい値に設定してください。</source><translation>1 = all 8760 hours (highest precision), 2 = 4380 hours, 24 = 365 hours (1 point/day)
+If large models run out of memory, set a larger value.</translation></message>
+    <message><source>最適化計算の対象期間を8760時間の一部（例: 1か月分）に制限します。
+計算時間・メモリ使用量を大幅に削減できますが、蓄電池のSOC推移など
+季節をまたぐ挙動の評価には向きません。年間CO2排出量上限などの制約も
+選択した期間のみで評価されます。
+0〜8760h（全期間）が既定値です。</source><translation>Restricts the optimization to part of the 8760-hour year (e.g. one month).
+This greatly reduces computation time and memory use, but is not suitable
+for evaluating behavior that spans seasons, such as battery SOC trends.
+Constraints such as the annual CO2 cap are also evaluated only over the
+selected period.
+The default is 0-8760h (the full period).</translation></message>
 </context>
 
 <!-- _YearSelectionDialog lives in run_panel.py -->
@@ -105,6 +146,32 @@
     <message><source>LCOE推移 [Currency/MWh]</source><translation>LCOE Trend [Currency/MWh]</translation></message>
     <message><source>CO₂原単位推移 [gCO₂/kWh]</source><translation>CO₂ Intensity Trend [gCO₂/kWh]</translation></message>
     <message><source>計画年</source><translation>Planning Year</translation></message>
+    <message><source>シナリオ比較</source><translation>Scenario Comparison</translation></message>
+    <message><source>◄ 前へ</source><translation>◄ Previous</translation></message>
+    <message><source>次へ ►</source><translation>Next ►</translation></message>
+    <message><source>比較年:</source><translation>Comparison Year:</translation></message>
+    <message><source>コスト内訳 ({year}年)</source><translation>Cost Breakdown ({year})</translation></message>
+    <message><source>該当年のデータがありません</source><translation>No data available for this year</translation></message>
+    <message><source>設備容量比較 ({year}年) [MW]</source><translation>Capacity Comparison ({year}) [MW]</translation></message>
+    <message><source>CO₂排出量比較 ({year}年) [tCO₂]</source><translation>CO₂ Emissions Comparison ({year}) [tCO₂]</translation></message>
+    <message><source>総コスト比較 ({year}年) [Currency]</source><translation>Total Cost Comparison ({year}) [Currency]</translation></message>
+    <message><source>LCOE比較 ({year}年) [Currency/MWh]</source><translation>LCOE Comparison ({year}) [Currency/MWh]</translation></message>
+    <message><source>CO₂原単位比較 ({year}年) [gCO₂/kWh]</source><translation>CO₂ Intensity Comparison ({year}) [gCO₂/kWh]</translation></message>
+    <message><source>エクスポート完了:
+</source><translation>Export complete:
+</translation></message>
+    <message><source>エクスポート失敗:
+</source><translation>Export failed:
+</translation></message>
+    <message><source>エラー</source><translation>Error</translation></message>
+    <message><source>完了</source><translation>Done</translation></message>
+    <message><source>PyPSA がインストールされていません。</source><translation>PyPSA is not installed.</translation></message>
+    <message><source>読み込みエラー</source><translation>Load Error</translation></message>
+    <message><source>一部のファイルで読み込みに失敗しました:
+
+</source><translation>Some files failed to load:
+
+</translation></message>
 </context>
 
 <context>
@@ -115,6 +182,8 @@
     <message><source>発電量(MWh)</source><translation>Generation (MWh)</translation></message>
     <message><source>建設費(Currency/年)</source><translation>Capex (Currency/yr)</translation></message>
     <message><source>運転費(Currency/年)</source><translation>Opex (Currency/yr)</translation></message>
+    <message><source>電源別サマリー — {}年</source><translation>Generator Summary — {}</translation></message>
+    <message><source>{}年  ステータス: {}</source><translation>{}  Status: {}</translation></message>
 </context>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -162,6 +231,34 @@
     <message><source>追加...</source><translation>Add...</translation></message>
     <message><source>編集...</source><translation>Edit...</translation></message>
     <message><source>年:</source><translation>Year:</translation></message>
+    <message><source>最適化</source><translation>Optimization</translation></message>
+    <message><source>完全予見（multi-period）最適化</source><translation>Perfect Foresight (Multi-period) Optimization</translation></message>
+    <message><source>最適化モード:</source><translation>Optimization Mode:</translation></message>
+    <message><source>ルール追加</source><translation>Add Rule</translation></message>
+    <message><source>ルール編集</source><translation>Edit Rule</translation></message>
+    <message><source>ルール削除</source><translation>Delete Rule</translation></message>
+    <message><source>{}年は既に追加されています。</source><translation>Year {} has already been added.</translation></message>
+    <message><source>計画年は1つ以上必要です。</source><translation>At least one planning year is required.</translation></message>
+    <message><source>シナリオの追加</source><translation>Add Scenario</translation></message>
+    <message><source>シナリオ名:</source><translation>Scenario Name:</translation></message>
+    <message><source>シナリオは1つ以上必要です。</source><translation>At least one scenario is required.</translation></message>
+    <message><source>削除確認</source><translation>Confirm Deletion</translation></message>
+    <message><source>シナリオ「{}」を削除しますか？</source><translation>Delete scenario "{}"?</translation></message>
+    <message><source>プロファイルの追加</source><translation>Add Profile</translation></message>
+    <message><source>プロファイル名:</source><translation>Profile Name:</translation></message>
+    <message><source>プロファイル「{}」を削除しますか？</source><translation>Delete profile "{}"?</translation></message>
+    <message><source>種別</source><translation>Type</translation></message>
+    <message><source>警告</source><translation>Warning</translation></message>
+    <message><source>有効にすると、全計画年を1つのネットワークとして同時最適化します。
+投資期間間の設備退役・追加が最適化されます（計画年が2つ以上必要）。
+注意: メモリ・計算時間が大幅に増加します。</source><translation>When enabled, all planning years are optimized together as a single network.
+Asset retirement/addition between investment periods is optimized
+(at least two planning years are required).
+Note: memory and computation time increase significantly.</translation></message>
+    <message><source>（プロファイルを選択してください）</source><translation>(Please select a profile)</translation></message>
+    <message><source>情報</source><translation>Information</translation></message>
+    <message><source>プロファイルを選択してください。</source><translation>Please select a profile.</translation></message>
+    <message><source>{}年は既に設定されています。</source><translation>Year {} has already been configured.</translation></message>
 </context>
 
 <context>
@@ -179,6 +276,7 @@
     <message><source>コンポーネント名を入力してください。</source><translation>Please enter a component name.</translation></message>
     <message><source>パラメータを入力してください。</source><translation>Please enter a parameter.</translation></message>
     <message><source>値は数値で入力してください。</source><translation>Please enter a numeric value.</translation></message>
+    <message><source>数値で入力</source><translation>Enter a numeric value</translation></message>
 </context>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -203,6 +301,9 @@
     <message><source>設備容量 (MW)</source><translation>Capacity (MW)</translation></message>
     <message><source>電源別設備容量</source><translation>Installed Capacity by Type</translation></message>
     <message><source>需要の内訳</source><translation>Demand Breakdown</translation></message>
+    <message><source>エリア詳細: {}</source><translation>Area Details: {}</translation></message>
+    <message><source>合計設備容量: {:,.1f} MW</source><translation>Total Installed Capacity: {:,.1f} MW</translation></message>
+    <message><source>合計需要: {:,.1f} MW</source><translation>Total Demand: {:,.1f} MW</translation></message>
 </context>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -215,6 +316,13 @@
     <message><source>需要</source><translation>Demand</translation></message>
     <message><source>バス選択</source><translation>Select Bus</translation></message>
     <message><source>発電機選択</source><translation>Select Generator</translation></message>
+    <message><source>太陽光・風力の設備利用率（0～1）と時間別需要（MW）を設定します。 Excelフォーマット: 1行目=バス名、2行目以降=8760時間分の値</source><translation>Set the capacity factor (0-1) for solar/wind and the hourly demand (MW). Excel format: row 1 = bus name, rows 2 onward = 8760 hourly values</translation></message>
+    <message><source>設備利用率 (-)</source><translation>Capacity Factor (-)</translation></message>
+    <message><source>発電設備選択</source><translation>Select Generator</translation></message>
+    <message><source>水力 CF</source><translation>Hydro CF</translation></message>
+    <message><source>バイオマス CF</source><translation>Biomass CF</translation></message>
+    <message><source>需要 (MW)</source><translation>Demand (MW)</translation></message>
+    <message><source>負荷選択</source><translation>Select Load</translation></message>
 </context>
 
 <context>
@@ -227,6 +335,27 @@
     <message><source>エラー</source><translation>Error</translation></message>
     <message><source>インポート成功</source><translation>Import Successful</translation></message>
     <message><source>エクスポート成功</source><translation>Export Successful</translation></message>
+    <message><source>設備利用率 (CF) / 実出力 (MW) を切り替えます</source><translation>Switch between Capacity Factor (CF) and Actual Output (MW)</translation></message>
+    <message><source>変動</source><translation>Variable</translation></message>
+    <message><source>出力を固定する（p_min_pu = p_max_pu）</source><translation>Fix output (p_min_pu = p_max_pu)</translation></message>
+    <message><source>Excelをインポートしました: </source><translation>Imported from Excel: </translation></message>
+    <message><source>インポート失敗:
+</source><translation>Import failed:
+</translation></message>
+    <message><source>データがありません。</source><translation>No data available.</translation></message>
+    <message><source>{} Excelエクスポート</source><translation>{} Excel Export</translation></message>
+    <message><source>Excelをエクスポートしました:
+</source><translation>Exported to Excel:
+</translation></message>
+    <message><source>エクスポート失敗:
+</source><translation>Export failed:
+</translation></message>
+    <message><source>拡張可能発電機はCFモード固定です（p_nomが未確定のためMW入力不可）</source><translation>Extendable generators are locked to CF mode (MW input is unavailable because p_nom is not yet determined)</translation></message>
+    <message><source>出力 (MW)</source><translation>Output (MW)</translation></message>
+    <message><source>拡張可能発電機は出力固定できません（p_nomが未確定）</source><translation>Output cannot be fixed for extendable generators (p_nom is not yet determined)</translation></message>
+    <message><source>固定</source><translation>Fixed</translation></message>
+    <message><source>完了</source><translation>Done</translation></message>
+    <message><source>情報</source><translation>Information</translation></message>
 </context>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -300,7 +429,9 @@
     <message><source>揚水発電所</source><translation>Pumped Hydro</translation></message>
     <message><source>変換器</source><translation>Converter</translation></message>
     <message><source>エリアを削除しますか？</source><translation>Delete area?</translation></message>
-    <message><source>エリア '{}' を削除しますか？\n関連するRES・連系線も削除されます。</source><translation>Delete area '{}'?\nAssociated RES and interconnections will also be removed.</translation></message>
+    <message><source>エリア '{}' を削除しますか？
+関連するRES・連系線も削除されます。</source><translation>Delete area '{}'?
+Associated RES and interconnections will also be removed.</translation></message>
     <message><source>連系線 '{}' を削除しますか？</source><translation>Delete interconnection '{}'?</translation></message>
     <message><source>編集するエリアを選択してください。</source><translation>Please select an area to edit.</translation></message>
     <message><source>編集する連系線を選択してください。</source><translation>Please select an interconnection to edit.</translation></message>
@@ -310,15 +441,102 @@
     <message><source>編集する貯蔵を選択してください。</source><translation>Please select a storage to edit.</translation></message>
     <message><source>編集する揚水発電所を選択してください。</source><translation>Please select a pumped hydro to edit.</translation></message>
     <message><source>編集する変換器を選択してください。</source><translation>Please select a converter to edit.</translation></message>
-    <message><source>テンプレートがありません。\n「コンポーネント定義」から作成してください。</source><translation>No templates found.\nPlease create one from "Component Templates".</translation></message>
+    <message><source>テンプレートがありません。
+「コンポーネント定義」から作成してください。</source><translation>No templates found.
+Please create one from "Component Templates".</translation></message>
     <message><source>編集するコンポーネントを選択してください。</source><translation>Please select a component to edit.</translation></message>
-    <!-- AreaEditDialog -->
+    <message><source>キャリア管理</source><translation>Manage Carriers</translation></message>
+    <message><source>操作を選択:</source><translation>Select Action:</translation></message>
+    <message><source>キャリア追加</source><translation>Add Carrier</translation></message>
+    <message><source>新しいキャリア名:</source><translation>New Carrier Name:</translation></message>
+    <message><source>キャリア '{}' は既に存在します。</source><translation>Carrier '{}' already exists.</translation></message>
+    <message><source>削除可能なユーザー定義キャリアがありません。</source><translation>There are no user-defined carriers available to delete.</translation></message>
+    <message><source>キャリア削除</source><translation>Delete Carrier</translation></message>
+    <message><source>削除するキャリア:</source><translation>Carrier to Delete:</translation></message>
+    <message><source>'{}' は使用中のため削除できません。</source><translation>'{}' is in use and cannot be deleted.</translation></message>
+    <message><source>ネットワークマネージャー</source><translation>Network Manager</translation></message>
+    <message><source>テーブル表示</source><translation>Show Table</translation></message>
+    <message><source>コンポーネントテーブルを別ウィンドウで表示します</source><translation>Show the component table in a separate window</translation></message>
+    <message><source>カスタムコンポーネントの編集（開発中）</source><translation>Edit Custom Components (In Development)</translation></message>
+    <message><source>カスタムコンポーネントの追加（開発中）</source><translation>Add Custom Component (In Development)</translation></message>
+    <message><source>テンプレートから新しいコンポーネントを追加します</source><translation>Add a new component from a template</translation></message>
+    <message><source>コンポーネント追加</source><translation>Add Component</translation></message>
+    <message><source>＋ 1次資源</source><translation>+ Primary Resource</translation></message>
+    <message><source>一次資源→キャリア変換（発電機）を追加</source><translation>Add a primary-resource-to-carrier converter (Generator)</translation></message>
+    <message><source>＋ 変換プロセス</source><translation>+ Conversion Process</translation></message>
+    <message><source>キャリア間の変換器を追加</source><translation>Add a converter between carriers</translation></message>
+    <message><source>＋ 需要</source><translation>+ Demand</translation></message>
+    <message><source>需要（Load）を追加</source><translation>Add a Demand (Load)</translation></message>
+    <message><source>＋ エネルギー貯蔵</source><translation>+ Energy Storage</translation></message>
+    <message><source>蓄電池等（Store）または揚水発電所を追加</source><translation>Add a Storage (Store) or Pumped Hydro plant</translation></message>
+    <message><source>エリアで使用するエネルギーキャリア（縦線）を追加/削除</source><translation>Add/remove the energy carriers (vertical lines) used in this area</translation></message>
+    <message><source>右クリック: 編集/削除
+ダブルクリック: 編集</source><translation>Right-click: Edit/Delete
+Double-click: Edit</translation></message>
+    <message><source>蓄電池等 (Store)</source><translation>Storage (Store)</translation></message>
+    <message><source>コンポーネントテーブル</source><translation>Component Table</translation></message>
+    <message><source>すべて表示</source><translation>Show All</translation></message>
+    <message><source>フィルタをクリア</source><translation>Clear Filter</translation></message>
+    <message><source>接続バス</source><translation>Connected Bus</translation></message>
+    <message><source>バスキャリア</source><translation>Bus Carrier</translation></message>
+    <message><source>フィルタ: 発電機  {} [{}]</source><translation>Filter: Generator  {} [{}]</translation></message>
+    <message><source>フィルタ: 発電機  {}</source><translation>Filter: Generator  {}</translation></message>
+    <message><source>フィルタ: 負荷  {}</source><translation>Filter: Load  {}</translation></message>
+    <message><source>フィルタ: 貯蔵  {}</source><translation>Filter: Storage  {}</translation></message>
+    <message><source>フィルタ: 揚水発電所  {}</source><translation>Filter: Pumped Hydro  {}</translation></message>
+    <message><source>フィルタ: 変換器  {}</source><translation>Filter: Converter  {}</translation></message>
+    <message><source>フィルタ: カスタム  {}</source><translation>Filter: Custom  {}</translation></message>
+    <message><source>コンポーネントテーブル: {}</source><translation>Component Table: {}</translation></message>
+    <message><source>エリア '{}' と関連コンポーネントを削除しますか？</source><translation>Delete area '{}' and its associated components?</translation></message>
+    <message><source>需要「{}」({}): 供給元がありません</source><translation>Demand "{}" ({}): no supply source</translation></message>
+    <message><source>貯蔵「{}」({}): 供給元がありません</source><translation>Storage "{}" ({}): no supply source</translation></message>
+    <message><source>変換器「{}」: 入力キャリア({})の供給元がありません</source><translation>Converter "{}": no supply source for input carrier ({})</translation></message>
+    <message><source>'{}' を削除しますか？</source><translation>Delete '{}'?</translation></message>
+    <message><source>テンプレートがありません。
+「カスタムコンポーネントの編集（開発中）」から作成してください。</source><translation>No templates found.
+Please create one from "Edit Custom Components (In Development)".</translation></message>
+    <message><source>テーブルが見つかりません（テンプレート: {}）</source><translation>Table not found (template: {})</translation></message>
+    <message><source>エリアが選択されていません。</source><translation>No area is selected.</translation></message>
+    <message><source>削除するインスタンスを選択してください。</source><translation>Please select an instance to delete.</translation></message>
+    <message><source>エネルギー容量 (MWh)</source><translation>Energy Capacity (MWh)</translation></message>
+    <message><source>容量拡張可能</source><translation>Capacity Extendable</translation></message>
+    <message><source>最大容量 (MWh)</source><translation>Max Capacity (MWh)</translation></message>
+    <message><source>最小容量 (MWh)</source><translation>Min Capacity (MWh)</translation></message>
+    <message><source>最小充電率</source><translation>Min State of Charge</translation></message>
+    <message><source>最大充電率</source><translation>Max State of Charge</translation></message>
+    <message><source>初期エネルギー</source><translation>Initial Energy</translation></message>
+    <message><source>自己放電率</source><translation>Standing Loss</translation></message>
+    <message><source>周期的充放電</source><translation>Cyclic State of Charge</translation></message>
+    <message><source>設備容量 (MW)</source><translation>Installed Capacity (MW)</translation></message>
+    <message><source>最大容量 (MW)</source><translation>Max Capacity (MW)</translation></message>
+    <message><source>最小容量 (MW)</source><translation>Min Capacity (MW)</translation></message>
+    <message><source>最大出力率</source><translation>Max Output Ratio</translation></message>
+    <message><source>最小出力率</source><translation>Min Output Ratio</translation></message>
+    <message><source>耐用年数 (年)</source><translation>Lifetime (years)</translation></message>
+    <message><source>コミットメント</source><translation>Committable</translation></message>
+    <message><source>最低運転時間 (h)</source><translation>Min Up Time (h)</translation></message>
+    <message><source>上昇ランプ率</source><translation>Ramp Up Limit</translation></message>
+    <message><source>下降ランプ率</source><translation>Ramp Down Limit</translation></message>
+</context>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- Per-dialog contexts (moved out of NetworkEditor: tr() context is  -->
+<!-- resolved at runtime from type(self).__name__, so each QDialog      -->
+<!-- subclass needs its own <context> block)                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<context>
+    <name>AreaEditDialog</name>
     <message><source>エリアの編集</source><translation>Edit Area</translation></message>
     <message><source>名前:</source><translation>Name:</translation></message>
     <message><source>緯度:</source><translation>Latitude:</translation></message>
     <message><source>経度:</source><translation>Longitude:</translation></message>
     <message><source>国:</source><translation>Country:</translation></message>
-    <!-- GeneratorDialog -->
+</context>
+
+<context>
+    <name>GeneratorDialog</name>
     <message><source>発電機の追加</source><translation>Add Generator</translation></message>
     <message><source>発電機の編集</source><translation>Edit Generator</translation></message>
     <message><source>エリア:</source><translation>Area:</translation></message>
@@ -332,22 +550,53 @@
     <message><source>建設年:</source><translation>Build Year:</translation></message>
     <message><source>コミットメント:</source><translation>Committable:</translation></message>
     <message><source>最低運転時間(h):</source><translation>Min Up Time (h):</translation></message>
-    <!-- InterconnectionDialog -->
+    <message><source>時系列を編集…</source><translation>Edit Time Series…</translation></message>
+    <message><source>接続バス:</source><translation>Connected Bus:</translation></message>
+    <message><source>時系列データ:</source><translation>Time Series:</translation></message>
+    <message><source>名前:</source><translation>Name:</translation></message>
+</context>
+
+<context>
+    <name>InterconnectionDialog</name>
     <message><source>連系線の追加</source><translation>Add Interconnection</translation></message>
     <message><source>連系線の編集</source><translation>Edit Interconnection</translation></message>
     <message><source>エリア0:</source><translation>Area 0:</translation></message>
     <message><source>エリア1:</source><translation>Area 1:</translation></message>
     <message><source>容量(順方向):</source><translation>Capacity (forward):</translation></message>
     <message><source>容量(逆方向):</source><translation>Capacity (reverse):</translation></message>
-    <!-- LoadDialog -->
+    <message><source>名前:</source><translation>Name:</translation></message>
+    <message><source>種別:</source><translation>Type:</translation></message>
+    <message><source>効率:</source><translation>Efficiency:</translation></message>
+    <message><source>拡張可能:</source><translation>Extendable:</translation></message>
+    <message><source>建設費:</source><translation>Capital Cost:</translation></message>
+    <message><source>変動費:</source><translation>Marginal Cost:</translation></message>
+    <message><source>建設年:</source><translation>Build Year:</translation></message>
+</context>
+
+<context>
+    <name>LoadDialog</name>
     <message><source>負荷の追加</source><translation>Add Load</translation></message>
     <message><source>負荷の編集</source><translation>Edit Load</translation></message>
     <message><source>需要:</source><translation>Demand:</translation></message>
-    <!-- StoreDialog -->
+    <message><source>時系列を編集…</source><translation>Edit Time Series…</translation></message>
+    <message><source>バスキャリア:</source><translation>Bus Carrier:</translation></message>
+    <message><source>時系列データ:</source><translation>Time Series:</translation></message>
+    <message><source>名前:</source><translation>Name:</translation></message>
+    <message><source>エリア:</source><translation>Area:</translation></message>
+</context>
+
+<context>
+    <name>StoreDialog</name>
     <message><source>貯蔵の追加</source><translation>Add Storage</translation></message>
     <message><source>貯蔵の編集</source><translation>Edit Storage</translation></message>
     <message><source>エネルギー容量:</source><translation>Energy Capacity:</translation></message>
-    <!-- PumpedHydroDialog -->
+    <message><source>名前:</source><translation>Name:</translation></message>
+    <message><source>エリア:</source><translation>Area:</translation></message>
+    <message><source>種別:</source><translation>Type:</translation></message>
+</context>
+
+<context>
+    <name>PumpedHydroDialog</name>
     <message><source>揚水発電所の追加</source><translation>Add Pumped Hydro</translation></message>
     <message><source>揚水発電所の編集</source><translation>Edit Pumped Hydro</translation></message>
     <message><source>ACエリア:</source><translation>AC Area:</translation></message>
@@ -356,7 +605,15 @@
     <message><source>ポンプ容量:</source><translation>Pump Capacity:</translation></message>
     <message><source>ポンプ効率:</source><translation>Pump Efficiency:</translation></message>
     <message><source>貯水容量:</source><translation>Reservoir Capacity:</translation></message>
-    <!-- ConverterDialog -->
+    <message><source>名前:</source><translation>Name:</translation></message>
+    <message><source>拡張可能:</source><translation>Extendable:</translation></message>
+    <message><source>建設費:</source><translation>Capital Cost:</translation></message>
+    <message><source>変動費:</source><translation>Marginal Cost:</translation></message>
+    <message><source>建設年:</source><translation>Build Year:</translation></message>
+</context>
+
+<context>
+    <name>ConverterDialog</name>
     <message><source>変換器の追加</source><translation>Add Converter</translation></message>
     <message><source>変換器の編集</source><translation>Edit Converter</translation></message>
     <message><source>プリセット:</source><translation>Preset:</translation></message>
@@ -366,6 +623,186 @@
     <message><source>効率1:</source><translation>Efficiency 1:</translation></message>
     <message><source>効率2 (CHP用):</source><translation>Efficiency 2 (CHP):</translation></message>
     <message><source>容量:</source><translation>Capacity:</translation></message>
+    <message><source>名前:</source><translation>Name:</translation></message>
+    <message><source>エリア:</source><translation>Area:</translation></message>
+    <message><source>拡張可能:</source><translation>Extendable:</translation></message>
+    <message><source>最大容量:</source><translation>Max Capacity:</translation></message>
+    <message><source>変動費:</source><translation>Marginal Cost:</translation></message>
+    <message><source>建設費:</source><translation>Capital Cost:</translation></message>
+    <message><source>建設年:</source><translation>Build Year:</translation></message>
+</context>
+
+<context>
+    <name>NetworkManagerWindow</name>
+    <message><source>ネットワークマネージャー</source><translation>Network Manager</translation></message>
+    <message><source>セル編集はフォーカス移動時に自動適用されます。</source><translation>Cell edits are applied automatically when focus moves away.</translation></message>
+    <message><source>接続バス</source><translation>Connected Bus</translation></message>
+    <message><source>バスキャリア</source><translation>Bus Carrier</translation></message>
+    <message><source>寿命</source><translation>Lifetime</translation></message>
+    <message><source>フィルタ…</source><translation>Filter…</translation></message>
+    <message><source>検索:</source><translation>Search:</translation></message>
+    <message><source>同名エリアが存在します。</source><translation>An area with this name already exists.</translation></message>
+    <message><source>先にエリアを追加してください。</source><translation>Please add an area first.</translation></message>
+    <message><source>連系線には2つ以上のエリアが必要です。</source><translation>At least two areas are required for an interconnection.</translation></message>
+    <message><source>エリア</source><translation>Area</translation></message>
+    <message><source>名前</source><translation>Name</translation></message>
+    <message><source>緯度</source><translation>Latitude</translation></message>
+    <message><source>経度</source><translation>Longitude</translation></message>
+    <message><source>国</source><translation>Country</translation></message>
+    <message><source>発電機</source><translation>Generators</translation></message>
+    <message><source>種別</source><translation>Type</translation></message>
+    <message><source>容量(MW)</source><translation>Capacity (MW)</translation></message>
+    <message><source>拡張可能</source><translation>Extendable</translation></message>
+    <message><source>最大容量(MW)</source><translation>Max Capacity (MW)</translation></message>
+    <message><source>変動費</source><translation>Opex</translation></message>
+    <message><source>建設費</source><translation>Capex</translation></message>
+    <message><source>効率</source><translation>Efficiency</translation></message>
+    <message><source>建設年</source><translation>Build Year</translation></message>
+    <message><source>連系線</source><translation>Interconnections</translation></message>
+    <message><source>エリア0</source><translation>Area 0</translation></message>
+    <message><source>エリア1</source><translation>Area 1</translation></message>
+    <message><source>逆方向容量(MW)</source><translation>Reverse Capacity (MW)</translation></message>
+    <message><source>需要</source><translation>Demand</translation></message>
+    <message><source>需要(MW)</source><translation>Demand (MW)</translation></message>
+    <message><source>貯蔵</source><translation>Storage</translation></message>
+    <message><source>エネルギー容量(MWh)</source><translation>Energy Capacity (MWh)</translation></message>
+    <message><source>揚水発電所</source><translation>Pumped Hydro</translation></message>
+    <message><source>ACエリア</source><translation>AC Area</translation></message>
+    <message><source>タービン容量(MW)</source><translation>Turbine Capacity (MW)</translation></message>
+    <message><source>タービン効率</source><translation>Turbine Efficiency</translation></message>
+    <message><source>ポンプ容量(MW)</source><translation>Pump Capacity (MW)</translation></message>
+    <message><source>ポンプ効率</source><translation>Pump Efficiency</translation></message>
+    <message><source>貯水容量(MWh)</source><translation>Reservoir Capacity (MWh)</translation></message>
+    <message><source>変換器</source><translation>Converter</translation></message>
+    <message><source>入力キャリア</source><translation>Input Carrier</translation></message>
+    <message><source>出力キャリア1</source><translation>Output Carrier 1</translation></message>
+    <message><source>出力キャリア2</source><translation>Output Carrier 2</translation></message>
+    <message><source>効率1</source><translation>Efficiency 1</translation></message>
+    <message><source>効率2</source><translation>Efficiency 2</translation></message>
+    <message><source>カスタム</source><translation>Custom</translation></message>
+    <message><source>テンプレート</source><translation>Template</translation></message>
+    <message><source>追加</source><translation>Add</translation></message>
+    <message><source>削除</source><translation>Delete</translation></message>
+    <message><source>警告</source><translation>Warning</translation></message>
+</context>
+
+<context>
+    <name>_GenTsDialog</name>
+    <message><source>時系列データ編集: {}  [{}]</source><translation>Edit Time Series: {}  [{}]</translation></message>
+    <message><source>設備利用率 CF</source><translation>Capacity Factor (CF)</translation></message>
+    <message><source>設備利用率 (-)</source><translation>Capacity Factor (-)</translation></message>
+    <message><source>発電設備</source><translation>Generator</translation></message>
+</context>
+
+<context>
+    <name>_LoadTsDialog</name>
+    <message><source>時系列データ編集: {}</source><translation>Edit Time Series: {}</translation></message>
+    <message><source>需要 (MW)</source><translation>Demand (MW)</translation></message>
+    <message><source>負荷</source><translation>Load</translation></message>
+    <message><source>需要</source><translation>Demand</translation></message>
+</context>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- Component template editor / node graph (RES editor "Edit Custom      -->
+<!-- Components (In Development)" dialog)                                 -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<context>
+    <name>PropertyPanel</name>
+    <message><source>ノード未選択</source><translation>No Node Selected</translation></message>
+    <message><source>基本</source><translation>Basic</translation></message>
+    <message><source>名前テンプレート:</source><translation>Name Template:</translation></message>
+    <message><source>キャリア:</source><translation>Carrier:</translation></message>
+    <message><source>公開パラメータ (インスタンス配置時に設定)</source><translation>Exposed Parameters (set when placing an instance)</translation></message>
+    <message><source>チェックしたパラメータをインスタンス配置時に設定できます</source><translation>Checked parameters can be set when placing an instance</translation></message>
+</context>
+
+<context>
+    <name>ComponentTemplateEditorDialog</name>
+    <message><source>コンポーネントテンプレートエディタ</source><translation>Component Template Editor</translation></message>
+    <message><source>テンプレート一覧</source><translation>Template List</translation></message>
+    <message><source>新規</source><translation>New</translation></message>
+    <message><source>複製</source><translation>Duplicate</translation></message>
+    <message><source>削除</source><translation>Delete</translation></message>
+    <message><source>名前:</source><translation>Name:</translation></message>
+    <message><source>テンプレート名</source><translation>Template Name</translation></message>
+    <message><source>説明:</source><translation>Description:</translation></message>
+    <message><source>任意の説明</source><translation>Optional description</translation></message>
+    <message><source>接続を検証</source><translation>Validate Connections</translation></message>
+    <message><source>確認</source><translation>Confirmation</translation></message>
+    <message><source>テンプレート「{}」を削除しますか？</source><translation>Delete template "{}"?</translation></message>
+    <message><source>情報</source><translation>Information</translation></message>
+    <message><source>先にテンプレートを選択または作成してください。</source><translation>Please select or create a template first.</translation></message>
+    <message><source>検証結果</source><translation>Validation Result</translation></message>
+    <message><source>問題は見つかりませんでした。</source><translation>No problems found.</translation></message>
+    <message><source>以下の問題が見つかりました:
+
+</source><translation>The following problems were found:
+
+</translation></message>
+</context>
+
+<context>
+    <name>CustomInstanceDialog</name>
+    <message><source>カスタムコンポーネントの編集</source><translation>Edit Custom Component</translation></message>
+    <message><source>カスタムコンポーネントの追加</source><translation>Add Custom Component</translation></message>
+    <message><source>名前:</source><translation>Name:</translation></message>
+    <message><source>エリア:</source><translation>Area:</translation></message>
+    <message><source>テンプレート:</source><translation>Template:</translation></message>
+    <message><source>このテンプレートには表示可能なパラメータがありません。
+コンポーネント定義の exposed_params を確認してください。</source><translation>This template has no displayable parameters.
+Check the exposed_params in the component definition.</translation></message>
+    <message><source>警告</source><translation>Warning</translation></message>
+    <message><source>名前を入力してください。</source><translation>Please enter a name.</translation></message>
+    <message><source>テンプレートがありません。</source><translation>No templates found.</translation></message>
+    <message><source>エネルギー容量 (MWh)</source><translation>Energy Capacity (MWh)</translation></message>
+    <message><source>容量拡張可能</source><translation>Capacity Extendable</translation></message>
+    <message><source>最大容量 (MWh)</source><translation>Max Capacity (MWh)</translation></message>
+    <message><source>最小容量 (MWh)</source><translation>Min Capacity (MWh)</translation></message>
+    <message><source>最小充電率</source><translation>Min State of Charge</translation></message>
+    <message><source>最大充電率</source><translation>Max State of Charge</translation></message>
+    <message><source>初期エネルギー</source><translation>Initial Energy</translation></message>
+    <message><source>自己放電率</source><translation>Standing Loss</translation></message>
+    <message><source>周期的充放電</source><translation>Cyclic State of Charge</translation></message>
+    <message><source>建設費</source><translation>Capital Cost</translation></message>
+    <message><source>変動費</source><translation>Marginal Cost</translation></message>
+    <message><source>設備容量 (MW)</source><translation>Installed Capacity (MW)</translation></message>
+    <message><source>最大容量 (MW)</source><translation>Max Capacity (MW)</translation></message>
+    <message><source>最小容量 (MW)</source><translation>Min Capacity (MW)</translation></message>
+    <message><source>最大出力率</source><translation>Max Output Ratio</translation></message>
+    <message><source>最小出力率</source><translation>Min Output Ratio</translation></message>
+    <message><source>効率</source><translation>Efficiency</translation></message>
+    <message><source>効率2</source><translation>Efficiency 2</translation></message>
+    <message><source>建設年</source><translation>Build Year</translation></message>
+    <message><source>耐用年数 (年)</source><translation>Lifetime (years)</translation></message>
+    <message><source>コミットメント</source><translation>Committable</translation></message>
+    <message><source>最低運転時間 (h)</source><translation>Min Up Time (h)</translation></message>
+    <message><source>上昇ランプ率</source><translation>Ramp Up Limit</translation></message>
+    <message><source>下降ランプ率</source><translation>Ramp Down Limit</translation></message>
+</context>
+
+<context>
+    <name>NodeGraphScene</name>
+    <message><source>「{}」の {} ポートが未接続です</source><translation>"{}" port {} is not connected</translation></message>
+    <message><source>「{}」のキャリア({})がバスのキャリア({})と不一致です</source><translation>Carrier of "{}" ({}) does not match the bus carrier ({})</translation></message>
+    <message><source>削除</source><translation>Delete</translation></message>
+</context>
+
+<context>
+    <name>NodeGraphWidget</name>
+    <message><source>Bus追加</source><translation>Add Bus</translation></message>
+    <message><source>Store追加</source><translation>Add Store</translation></message>
+    <message><source>Link追加</source><translation>Add Link</translation></message>
+    <message><source>Gen追加</source><translation>Add Generator</translation></message>
+    <message><source>エリアバス追加</source><translation>Add Area Bus</translation></message>
+    <message><source>選択削除</source><translation>Delete Selected</translation></message>
+    <message><source>全体表示</source><translation>Fit All</translation></message>
+</context>
+
+<context>
+    <name>ExternalBusItem</name>
+    <message><source>(エリアバス)</source><translation>(Area Bus)</translation></message>
 </context>
 
 </TS>

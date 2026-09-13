@@ -83,7 +83,7 @@ class PropertyPanel(QWidget):
         lay.setContentsMargins(4, 4, 4, 4)
 
         title_font = QFont(); title_font.setBold(True); title_font.setPointSize(9)
-        self._title = QLabel("ノード未選択")
+        self._title = QLabel(self.tr("ノード未選択"))
         self._title.setFont(title_font)
         lay.addWidget(self._title)
 
@@ -114,19 +114,19 @@ class PropertyPanel(QWidget):
         self._param_checks.clear()
 
         if self._sub is None:
-            self._title.setText("ノード未選択")
+            self._title.setText(self.tr("ノード未選択"))
             return
 
         sub = self._sub
         self._title.setText(f"[{sub.component_type}] {sub.sub_id}")
 
         # ── Basic ─────────────────────────────────────────────────────
-        grp_basic = QGroupBox("基本")
+        grp_basic = QGroupBox(self.tr("基本"))
         form_basic = QFormLayout(grp_basic)
 
         self._name_edit = QLineEdit(sub.name_template)
         self._name_edit.textChanged.connect(self._on_name_changed)
-        form_basic.addRow("名前テンプレート:", self._name_edit)
+        form_basic.addRow(self.tr("名前テンプレート:"), self._name_edit)
 
         ct = sub.component_type
         carriers = _CARRIER_OPTIONS.get(ct, [])
@@ -139,7 +139,7 @@ class PropertyPanel(QWidget):
             elif carriers:
                 self._carrier_combo.setCurrentIndex(0)
             self._carrier_combo.currentTextChanged.connect(self._on_carrier_changed)
-            lbl = "キャリア:"
+            lbl = self.tr("キャリア:")
             form_basic.addRow(lbl, self._carrier_combo)
         else:
             self._carrier_combo = None
@@ -149,9 +149,9 @@ class PropertyPanel(QWidget):
         # ── Exposed params ────────────────────────────────────────────
         available = AVAILABLE_EXPOSED_PARAMS.get(ct, [])
         if available:
-            grp_exp = QGroupBox("公開パラメータ (インスタンス配置時に設定)")
+            grp_exp = QGroupBox(self.tr("公開パラメータ (インスタンス配置時に設定)"))
             vlay = QVBoxLayout(grp_exp)
-            note = QLabel("チェックしたパラメータをインスタンス配置時に設定できます")
+            note = QLabel(self.tr("チェックしたパラメータをインスタンス配置時に設定できます"))
             note.setWordWrap(True)
             note.setStyleSheet("color:#666; font-size:10px;")
             vlay.addWidget(note)
@@ -204,7 +204,7 @@ class ComponentTemplateEditorDialog(QDialog):
 
     def __init__(self, templates: List[ComponentTemplate], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("コンポーネントテンプレートエディタ")
+        self.setWindowTitle(self.tr("コンポーネントテンプレートエディタ"))
         self.setMinimumSize(1100, 680)
         self._templates: List[ComponentTemplate] = [t for t in templates]
         self._current: Optional[ComponentTemplate] = None
@@ -223,7 +223,7 @@ class ComponentTemplateEditorDialog(QDialog):
         # ── Left: template list ───────────────────────────────────────
         left = QWidget(); left.setFixedWidth(200)
         ll = QVBoxLayout(left); ll.setContentsMargins(0, 0, 0, 0)
-        lbl = QLabel("テンプレート一覧")
+        lbl = QLabel(self.tr("テンプレート一覧"))
         lbl.setStyleSheet("font-weight:bold;")
         ll.addWidget(lbl)
         self._tmpl_list = QListWidget()
@@ -231,9 +231,9 @@ class ComponentTemplateEditorDialog(QDialog):
         ll.addWidget(self._tmpl_list)
 
         btn_row = QHBoxLayout()
-        self._btn_new   = QPushButton("新規")
-        self._btn_clone = QPushButton("複製")
-        self._btn_del_t = QPushButton("削除")
+        self._btn_new   = QPushButton(self.tr("新規"))
+        self._btn_clone = QPushButton(self.tr("複製"))
+        self._btn_del_t = QPushButton(self.tr("削除"))
         for b in (self._btn_new, self._btn_clone, self._btn_del_t):
             b.setFixedHeight(26); btn_row.addWidget(b)
         self._btn_new.clicked.connect(self._new_template)
@@ -247,14 +247,14 @@ class ComponentTemplateEditorDialog(QDialog):
         cl = QVBoxLayout(center); cl.setContentsMargins(0, 0, 0, 0)
 
         meta = QHBoxLayout()
-        meta.addWidget(QLabel("名前:"))
+        meta.addWidget(QLabel(self.tr("名前:")))
         self._name_edit = QLineEdit()
-        self._name_edit.setPlaceholderText("テンプレート名")
+        self._name_edit.setPlaceholderText(self.tr("テンプレート名"))
         self._name_edit.textChanged.connect(self._on_tmpl_name_changed)
         meta.addWidget(self._name_edit, 1)
-        meta.addWidget(QLabel("説明:"))
+        meta.addWidget(QLabel(self.tr("説明:")))
         self._desc_edit = QLineEdit()
-        self._desc_edit.setPlaceholderText("任意の説明")
+        self._desc_edit.setPlaceholderText(self.tr("任意の説明"))
         self._desc_edit.textChanged.connect(self._on_desc_changed)
         meta.addWidget(self._desc_edit, 2)
         cl.addLayout(meta)
@@ -266,7 +266,7 @@ class ComponentTemplateEditorDialog(QDialog):
         cl.addWidget(self._graph)
 
         btn_bar = QHBoxLayout()
-        self._btn_validate = QPushButton("接続を検証")
+        self._btn_validate = QPushButton(self.tr("接続を検証"))
         self._btn_validate.clicked.connect(self._validate)
         btn_bar.addWidget(self._btn_validate)
         btn_bar.addStretch()
@@ -340,8 +340,8 @@ class ComponentTemplateEditorDialog(QDialog):
         if not self._current:
             return
         reply = QMessageBox.question(
-            self, "確認",
-            f"テンプレート「{self._current.name}」を削除しますか？",
+            self, self.tr("確認"),
+            self.tr("テンプレート「{}」を削除しますか？").format(self._current.name),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -366,7 +366,7 @@ class ComponentTemplateEditorDialog(QDialog):
     # ── node add/delete ───────────────────────────────────────────────
     def _on_add_node(self, component_type: str):
         if not self._current:
-            QMessageBox.information(self, "情報", "先にテンプレートを選択または作成してください。")
+            QMessageBox.information(self, self.tr("情報"), self.tr("先にテンプレートを選択または作成してください。"))
             return
         # generate unique sub_id
         key = component_type.lower()
@@ -419,10 +419,10 @@ class ComponentTemplateEditorDialog(QDialog):
     def _validate(self):
         errors = self._graph.validate()
         if not errors:
-            QMessageBox.information(self, "検証結果", "問題は見つかりませんでした。")
+            QMessageBox.information(self, self.tr("検証結果"), self.tr("問題は見つかりませんでした。"))
         else:
-            QMessageBox.warning(self, "検証結果",
-                                "以下の問題が見つかりました:\n\n" + "\n".join(errors))
+            QMessageBox.warning(self, self.tr("検証結果"),
+                                self.tr("以下の問題が見つかりました:\n\n") + "\n".join(errors))
 
     def _on_close(self):
         self.templates_changed.emit(self._templates)
@@ -444,9 +444,8 @@ class CustomInstanceDialog(QDialog):
     def __init__(self, templates: List[ComponentTemplate], areas,
                  parent=None, existing: Optional[CustomComponentInstance] = None,
                  preset_area: str = "", cur: str = "Currency"):
-        title = "カスタムコンポーネントの編集" if existing else "カスタムコンポーネントの追加"
         super().__init__(parent)
-        self.setWindowTitle(title)
+        self.setWindowTitle(self.tr("カスタムコンポーネントの編集") if existing else self.tr("カスタムコンポーネントの追加"))
         self.setMinimumWidth(420)
         self.resize(560, 640)
         self._templates = templates
@@ -463,17 +462,17 @@ class CustomInstanceDialog(QDialog):
 
         form = QFormLayout()
         self._name_edit = QLineEdit(default_name)
-        form.addRow("名前:", self._name_edit)
+        form.addRow(self.tr("名前:"), self._name_edit)
 
         self._area_combo = QComboBox()
         self._area_combo.addItems([a.name for a in areas])
         if preset_area and preset_area in [a.name for a in areas]:
             self._area_combo.setCurrentText(preset_area)
-        form.addRow("エリア:", self._area_combo)
+        form.addRow(self.tr("エリア:"), self._area_combo)
 
         self._tmpl_combo = QComboBox()
         self._tmpl_combo.addItems([t.name for t in templates])
-        form.addRow("テンプレート:", self._tmpl_combo)
+        form.addRow(self.tr("テンプレート:"), self._tmpl_combo)
         outer.addLayout(form)
 
         # param area (scroll)
@@ -523,11 +522,13 @@ class CustomInstanceDialog(QDialog):
                 key = f"{sub.sub_id}.{p}"
                 w = self._make_param_widget(p)
                 self._param_widgets[key] = w
-                flayout.addRow(f"{PARAM_LABELS.get(p, p)}:", w)
+                flayout.addRow(f"{self.tr(PARAM_LABELS.get(p, p))}:", w)
             self._param_lay.addWidget(grp)
 
         if not has_any:
-            msg = QLabel("このテンプレートには表示可能なパラメータがありません。\nコンポーネント定義の exposed_params を確認してください。")
+            msg = QLabel(self.tr(
+                "このテンプレートには表示可能なパラメータがありません。\n"
+                "コンポーネント定義の exposed_params を確認してください。"))
             msg.setWordWrap(True)
             self._param_lay.addWidget(msg)
         self._param_lay.addStretch()
@@ -573,10 +574,10 @@ class CustomInstanceDialog(QDialog):
     # ── accept ────────────────────────────────────────────────────────
     def _on_accept(self):
         if not self._name_edit.text().strip():
-            QMessageBox.warning(self, "警告", "名前を入力してください。")
+            QMessageBox.warning(self, self.tr("警告"), self.tr("名前を入力してください。"))
             return
         if not self._templates:
-            QMessageBox.warning(self, "警告", "テンプレートがありません。")
+            QMessageBox.warning(self, self.tr("警告"), self.tr("テンプレートがありません。"))
             return
         self.accept()
 

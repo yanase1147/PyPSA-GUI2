@@ -115,14 +115,14 @@ class RunPanel(QWidget):
         self.algorithm_combo = QComboBox()
         for label, _value in _ALGORITHMS:
             self.algorithm_combo.addItem(label)
-        self.algorithm_combo.setToolTip(
+        self.algorithm_combo.setToolTip(self.tr(
             "HiGHSソルバーのLPアルゴリズムを選択します。\n"
             "自動: HiGHSが問題の特性に応じて選択（既定）\n"
             "単体法 (Simplex): 反復回数は多いが小〜中規模問題で安定\n"
             "内点法 (IPM): 大規模問題で高速な場合があるが、厳密な基底解が必要な場合は\n"
             "              単体法によるクロスオーバーが追加で必要になることがあります。\n"
             "※ HiGHS以外のソルバーを選択した場合、この設定は適用されません。"
-        )
+        ))
         algo_lay.addWidget(self.algorithm_combo)
         top_row.addWidget(algo_grp)
 
@@ -134,10 +134,10 @@ class RunPanel(QWidget):
         self.snapshot_step_spin.setRange(1, 168)
         self.snapshot_step_spin.setValue(1)
         self.snapshot_step_spin.setSuffix(self.tr(" 時間おき"))
-        self.snapshot_step_spin.setToolTip(
+        self.snapshot_step_spin.setToolTip(self.tr(
             "1=全8760時間（最高精度）、2=4380時間、24=365時間（1日1点）\n"
             "大規模モデルでメモリ不足が発生する場合は大きい値に設定してください。"
-        )
+        ))
         step_lay.addWidget(self.snapshot_step_spin)
         top_row.addWidget(step_grp)
 
@@ -173,13 +173,13 @@ class RunPanel(QWidget):
         period_lay.addWidget(btn_period_month)
         period_lay.addWidget(btn_period_week)
 
-        period_grp.setToolTip(
+        period_grp.setToolTip(self.tr(
             "最適化計算の対象期間を8760時間の一部（例: 1か月分）に制限します。\n"
             "計算時間・メモリ使用量を大幅に削減できますが、蓄電池のSOC推移など\n"
             "季節をまたぐ挙動の評価には向きません。年間CO2排出量上限などの制約も\n"
             "選択した期間のみで評価されます。\n"
             "0〜8760h（全期間）が既定値です。"
-        )
+        ))
         self.period_start_spin.valueChanged.connect(self._on_period_changed)
         self.period_end_spin.valueChanged.connect(self._on_period_changed)
         top_row.addWidget(period_grp)
@@ -205,7 +205,7 @@ class RunPanel(QWidget):
         out_lay = QHBoxLayout(out_grp)
         self.output_dir_edit = QLineEdit()
         self.output_dir_edit.setPlaceholderText(
-            self.tr("フォルダを選択してくださь（空欄の場合は保存しません）"))
+            self.tr("フォルダを選択してください（空欄の場合は保存しません）"))
         self.output_dir_edit.setReadOnly(True)
         btn_browse = QPushButton(self.tr("参照..."))
         btn_browse.setFixedWidth(72)
@@ -303,7 +303,7 @@ class RunPanel(QWidget):
     def _edit_selected_scenario_years(self):
         row = self.scenario_table.currentRow()
         if row < 0 or row >= len(self._scenarios):
-            self._append_log(self.tr("計画年を編集するシナリオを選択してくださь。"))
+            self._append_log(self.tr("計画年を編集するシナリオを選択してください。"))
             return
         sc = self._scenarios[row]
         current = self._scenario_year_selection.get(sc.name, set(sc.planning_years))
@@ -387,7 +387,7 @@ class RunPanel(QWidget):
             run_items.append((sc, years, self._get_profiles_for_scenario(sc)))
 
         if not run_items:
-            self._append_log(self.tr("実行対象がありません。シナリオと計画年を選択してくださь。"))
+            self._append_log(self.tr("実行対象がありません。シナリオと計画年を選択してください。"))
             return
 
         solver = self.solver_combo.currentText()
@@ -423,7 +423,7 @@ class RunPanel(QWidget):
             self.btn_run.setEnabled(True)
             self.btn_stop.setEnabled(False)
             self.progress.setVisible(False)
-            self._append_log(self.tr("\n最適化完了。「結果」タブで確認してくださь。"))
+            self._append_log(self.tr("\n最適化完了。「結果」タブで確認してください。"))
             mw = self.window()
             if hasattr(mw, "on_optimization_finished"):
                 mw.on_optimization_finished(dict(self._batch_results))

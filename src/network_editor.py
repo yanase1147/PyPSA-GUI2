@@ -474,14 +474,10 @@ class NetworkEditor(QWidget):
             toolbar.addWidget(btn)
         self.btn_select.setChecked(True)
         toolbar.addStretch()
-        self.btn_tmpl_editor = QPushButton(self.tr("コンポーネント定義"))
         self.btn_network_manager = QPushButton(self.tr("ネットワークマネージャー"))
         self.btn_network_manager.setFixedHeight(28)
         self.btn_network_manager.clicked.connect(self._open_network_manager)
         toolbar.addWidget(self.btn_network_manager)
-        self.btn_tmpl_editor.setFixedHeight(28)
-        self.btn_tmpl_editor.clicked.connect(self._open_template_editor)
-        toolbar.addWidget(self.btn_tmpl_editor)
         layout.addLayout(toolbar)
 
         self.btn_select.clicked.connect(lambda: self._set_mode("select"))
@@ -535,7 +531,7 @@ class NetworkEditor(QWidget):
             self.area_table,
             edit_cb=self._edit_area_dialog,
             del_cb=self._delete_area_from_table,
-            note=self.tr("ダブルクリックまたはマップクリックRES編集ウィンドウを開く"),
+            note=self.tr("ダブルクリックまたはマップクリックでRES編集ウィンドウを開く"),
         )
         tabs.addTab(area_tab, self.tr("エリア"))
 
@@ -570,22 +566,28 @@ class NetworkEditor(QWidget):
         self._area_label.setFont(font)
         header.addWidget(self._area_label)
         header.addStretch()
+        _res_btn_font = QFont(); _res_btn_font.setPointSize(8)
         self.btn_edit_area = QPushButton(self.tr("エリア編集"))
-        self.btn_edit_area.setFixedHeight(26)
+        self.btn_edit_area.setFixedHeight(20)
+        self.btn_edit_area.setFont(_res_btn_font)
         self.btn_edit_area.clicked.connect(self._edit_area_dialog_from_res)
         self.btn_table = QPushButton(self.tr("テーブル表示"))
-        self.btn_table.setFixedHeight(26)
+        self.btn_table.setFixedHeight(20)
+        self.btn_table.setFont(_res_btn_font)
         self.btn_table.setCheckable(True)
         self.btn_table.setToolTip(self.tr("コンポーネントテーブルを別ウィンドウで表示します"))
         self.btn_table.clicked.connect(self._toggle_table_window)
-        btn_tmpl = QPushButton(self.tr("コンポーネント定義"))
-        btn_tmpl.setFixedHeight(26)
+        btn_tmpl = QPushButton(self.tr("カスタムコンポーネントの編集（開発中）"))
+        btn_tmpl.setFixedHeight(20)
+        btn_tmpl.setFont(_res_btn_font)
         btn_tmpl.clicked.connect(lambda: self._open_template_editor(self._res_window))
         btn_carrier = QPushButton(self.tr("キャリア管理"))
-        btn_carrier.setFixedHeight(26)
+        btn_carrier.setFixedHeight(20)
+        btn_carrier.setFont(_res_btn_font)
         btn_carrier.clicked.connect(self._manage_carriers)
-        self.btn_add_custom = QPushButton(self.tr("＋ コンポーネント追加"))
-        self.btn_add_custom.setFixedHeight(26)
+        self.btn_add_custom = QPushButton(self.tr("カスタムコンポーネントの追加（開発中）"))
+        self.btn_add_custom.setFixedHeight(20)
+        self.btn_add_custom.setFont(_res_btn_font)
         self.btn_add_custom.setToolTip(self.tr("テンプレートから新しいコンポーネントを追加します"))
         self.btn_add_custom.clicked.connect(lambda: self._add_custom_dialog())
         header.addWidget(self.btn_edit_area)
@@ -753,7 +755,7 @@ class NetworkEditor(QWidget):
 
         self.conv_table = self._make_table([
             self.tr("名前"), self.tr("エリア"), self.tr("入力キャリア"), self.tr("出力キャリア1"), self.tr("出力キャリア2"),
-            self.tr("効率１"), self.tr("効率２"), self.tr("容量(MW)"), self.tr("拡張可能"), self.tr(f"建設費({cur}/MW)"), self.tr(f"変動費({cur}/MWh)"), self.tr("建設年"),
+            self.tr("効率1"), self.tr("効率2"), self.tr("容量(MW)"), self.tr("拡張可能"), self.tr(f"建設費({cur}/MW)"), self.tr(f"変動費({cur}/MWh)"), self.tr("建設年"),
         ])
         self.conv_table.cellDoubleClicked.connect(lambda r, c: self._edit_converter_dialog())
         res_tabs.addTab(
@@ -811,7 +813,7 @@ class NetworkEditor(QWidget):
         elif kind == "store":
             tab_idx = 2; table = self.store_table
             filter_col = 0; filter_val = name
-            label = self.tr("フィルタ: 豌蔽  {}").format(name)
+            label = self.tr("フィルタ: 貯蔵  {}").format(name)
         elif kind in ("pumped_hydro", "pumped_hydro_group"):
             tab_idx = 3; table = self.ph_table
             filter_col = 0 if kind == "pumped_hydro" else -1
@@ -955,18 +957,17 @@ class NetworkEditor(QWidget):
         t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         return t
 
-    @staticmethod
-    def _wrap_table(table, add_cb=None, edit_cb=None, del_cb=None, note=""):
+    def _wrap_table(self, table, add_cb=None, edit_cb=None, del_cb=None, note=""):
         w = QWidget()
         lay = QVBoxLayout(w)
         lay.setContentsMargins(0, 4, 0, 0)
         btn_row = QHBoxLayout()
         if add_cb:
-            ba = QPushButton(table.tr("追加")); ba.clicked.connect(add_cb); btn_row.addWidget(ba)
+            ba = QPushButton(self.tr("追加")); ba.clicked.connect(add_cb); btn_row.addWidget(ba)
         if edit_cb:
-            be = QPushButton(table.tr("編集")); be.clicked.connect(edit_cb); btn_row.addWidget(be)
+            be = QPushButton(self.tr("編集")); be.clicked.connect(edit_cb); btn_row.addWidget(be)
         if del_cb:
-            bd = QPushButton(table.tr("削除")); bd.clicked.connect(del_cb); btn_row.addWidget(bd)
+            bd = QPushButton(self.tr("削除")); bd.clicked.connect(del_cb); btn_row.addWidget(bd)
         btn_row.addStretch()
         if note:
             btn_row.addWidget(QLabel(f"  ※ {note}"))
@@ -1129,7 +1130,7 @@ class NetworkEditor(QWidget):
 
             from .component_template_editor import PARAM_LABELS
             headers = [self.tr("名前"), self.tr("エリア")] + [
-                PARAM_LABELS.get(p, p) for _, p in exposed_keys]
+                self.tr(PARAM_LABELS.get(p, p)) for _, p in exposed_keys]
             table = self._make_table(headers)
             for ci in instances:
                 r = table.rowCount()
@@ -2104,7 +2105,7 @@ class NetworkEditor(QWidget):
         if not self.network.component_templates:
             QMessageBox.information(
                 self._res_window, self.tr("情報"),
-                self.tr("テンプレートがありません。\n「コンポーネント定義」から作成してください。"))
+                self.tr("テンプレートがありません。\n「カスタムコンポーネントの編集（開発中）」から作成してください。"))
             return
         # preset_template が指定されたらそのテンプレートのみ渡す
         if preset_template:
