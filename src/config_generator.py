@@ -20,6 +20,11 @@ from .models import (
     NetworkData, ScenarioData, TimeSeriesData, CF_CARRIERS,
     ScenarioProfile, resolve_co2_settings, resolve_carrier_costs,
 )
+from .component_templates import (
+    BUS_SLOTS, build_sub_name_map, expand_instance,
+    resolve_bus_ref as _resolve_template_bus_ref,
+    normalize_bus_ref as _normalize_bus_ref,
+)
 
 N_HOURS = 8760
 
@@ -57,6 +62,7 @@ def _collect_needed_carriers(net: NetworkData) -> dict:
             continue
         for sub in tmpl.sub_components:
             for ref in sub.bus_connections.values():
+                ref = _normalize_bus_ref(ref)
                 if ref.startswith("area:"):
                     carrier = ref[5:]
                     if carrier not in ("AC", ""):
@@ -67,16 +73,25 @@ def _collect_needed_carriers(net: NetworkData) -> dict:
 def _resolve_bus_ref(ref: str, area: str, instance_name: str,
                      tmpl, sub_name_map: dict | None = None) -> str:
     """bus_connections の参照文字列を実際の PyPSA バス名に変換。"""
-    if ref.startswith("area:"):
-        return _bus_name(area, ref[5:])
-    if ref.startswith("internal:"):
-        sub_id = ref[9:]
-        if sub_name_map and sub_id in sub_name_map:
-            return sub_name_map[sub_id]
-        sub = next((s for s in tmpl.sub_components if s.sub_id == sub_id), None)
-        if sub:
-            return sub.name_template.replace("{name}", instance_name)
-    return ref
+    return _resolve_template_bus_ref(
+        ref, area, instance_name, tmpl, sub_name_map, _bus_name)
+
+
+def _add_template_components(n, tmpl, ci, param_hook) -> None:
+    """複合コンポーネントのテンプレートを展開し、PyPSA ネットワークへ追加する。"""
+    sub_name_map = build_sub_name_map(
+        tmpl, ci.name,
+        lambda sub, base: _unique_component_name(
+            n, sub.component_type, base, scope_hint=f"{ci.area}_{ci.name}"),
+    )
+    for ctype, name, params in expand_instance(
+            tmpl, ci,
+            sub_name_map=sub_name_map,
+            bus_name_fn=_bus_name,
+            param_hook=param_hook):
+        if ctype not in BUS_SLOTS:
+            continue          # 未知の種別は無視（Excel の入力ミス対策）
+        n.add(ctype, name, **params)
 
 
 _COMPONENT_INDEX_ATTR = {
@@ -509,69 +524,14 @@ def build_network(
             continue
         ci_lt = ci.lifetime if ci.lifetime > 0 else 25
 
-        sub_name_map: dict[str, str] = {}
-        for sub in tmpl.sub_components:
-            base_name = sub.name_template.replace("{name}", ci.name)
-            sub_name_map[sub.sub_id] = _unique_component_name(
-                n,
-                sub.component_type,
-                base_name,
-                scope_hint=f"{ci.area}_{ci.name}",
-            )
-
-        for sub in tmpl.sub_components:
-            actual_name = sub_name_map.get(
-                sub.sub_id,
-                sub.name_template.replace("{name}", ci.name),
-            )
-            params: dict = dict(sub.fixed_params)
-            for p_name in sub.exposed_params:
-                key = f"{sub.sub_id}.{p_name}"
-                if key in ci.param_values:
-                    params[p_name] = ci.param_values[key]
-
+        def _hook(sub, params, _lt=ci_lt):
             # Annualize capital_cost using instance lifetime
             if params.get("capital_cost"):
                 params["capital_cost"] = _annualize(
-                    float(params["capital_cost"]), scenario.discount_rate, ci_lt)
+                    float(params["capital_cost"]), scenario.discount_rate, _lt)
+            return params
 
-            ct = sub.component_type
-            if ct == "Bus":
-                n.add("Bus", actual_name, **params)
-            elif ct == "Store":
-                bus_ref = sub.bus_connections.get("bus", "")
-                if bus_ref:
-                    params["bus"] = _resolve_bus_ref(
-                        bus_ref,
-                        ci.area,
-                        ci.name,
-                        tmpl,
-                        sub_name_map,
-                    )
-                n.add("Store", actual_name, **params)
-            elif ct == "Generator":
-                bus_ref = sub.bus_connections.get("bus", "")
-                if bus_ref:
-                    params["bus"] = _resolve_bus_ref(
-                        bus_ref,
-                        ci.area,
-                        ci.name,
-                        tmpl,
-                        sub_name_map,
-                    )
-                n.add("Generator", actual_name, **params)
-            elif ct == "Link":
-                for slot in ("bus0", "bus1", "bus2"):
-                    ref = sub.bus_connections.get(slot)
-                    if ref:
-                        params[slot] = _resolve_bus_ref(
-                            ref,
-                            ci.area,
-                            ci.name,
-                            tmpl,
-                            sub_name_map,
-                        )
-                n.add("Link", actual_name, **params)
+        _add_template_components(n, tmpl, ci, _hook)
 
     # ── CO₂ constraint ────────────────────────────────────────────────
     if co2_limit < 1e18:
@@ -928,50 +888,12 @@ def build_multi_period_network(
             continue
         ci_lt = ci.lifetime if ci.lifetime > 0 else 25
 
-        sub_name_map: dict[str, str] = {}
-        for sub in tmpl.sub_components:
-            base_name = sub.name_template.replace("{name}", ci.name)
-            sub_name_map[sub.sub_id] = _unique_component_name(
-                n, sub.component_type, base_name,
-                scope_hint=f"{ci.area}_{ci.name}",
-            )
+        def _hook(sub, params, _lt=ci_lt):
+            if sub.component_type != "Bus":      # Bus に lifetime は無い
+                params.setdefault("lifetime", _lt)
+            return params
 
-        for sub in tmpl.sub_components:
-            actual_name = sub_name_map.get(
-                sub.sub_id,
-                sub.name_template.replace("{name}", ci.name),
-            )
-            params: dict = dict(sub.fixed_params)
-            for p_name in sub.exposed_params:
-                key = f"{sub.sub_id}.{p_name}"
-                if key in ci.param_values:
-                    params[p_name] = ci.param_values[key]
-
-            if "lifetime" not in params:
-                params["lifetime"] = ci_lt
-
-            ct = sub.component_type
-            if ct == "Bus":
-                n.add("Bus", actual_name, **params)
-            elif ct == "Store":
-                bus_ref = sub.bus_connections.get("bus", "")
-                if bus_ref:
-                    params["bus"] = _resolve_bus_ref(
-                        bus_ref, ci.area, ci.name, tmpl, sub_name_map)
-                n.add("Store", actual_name, **params)
-            elif ct == "Generator":
-                bus_ref = sub.bus_connections.get("bus", "")
-                if bus_ref:
-                    params["bus"] = _resolve_bus_ref(
-                        bus_ref, ci.area, ci.name, tmpl, sub_name_map)
-                n.add("Generator", actual_name, **params)
-            elif ct == "Link":
-                for slot in ("bus0", "bus1", "bus2"):
-                    ref = sub.bus_connections.get(slot)
-                    if ref:
-                        params[slot] = _resolve_bus_ref(
-                            ref, ci.area, ci.name, tmpl, sub_name_map)
-                n.add("Link", actual_name, **params)
+        _add_template_components(n, tmpl, ci, _hook)
 
     # ── Per-period CO₂ constraints ───────────────────────────────────
     for yr in planning_years:

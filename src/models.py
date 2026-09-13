@@ -221,6 +221,7 @@ class SubComponentDef:
     bus_connections: Dict[str, str] = field(default_factory=dict)
     pos_x: float = 0.0
     pos_y: float = 0.0
+    description: str = ""        # 要素の役割（Excel シート上の注記用）
 
 
 @dataclass
@@ -228,6 +229,7 @@ class ComponentTemplate:
     name: str
     description: str = ""
     sub_components: List[SubComponentDef] = field(default_factory=list)
+    category: str = ""           # 分類（例: 蓄電池 / 水素貯蔵 / 揚水発電）
 
 
 @dataclass

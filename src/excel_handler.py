@@ -6,9 +6,12 @@ from openpyxl.utils import get_column_letter
 
 from .models import (
     NetworkData, Area, AreaRES, Generator, Interconnection, Load, Store, PumpedHydro,
-    Converter, ComponentTemplate, SubComponentDef, CustomComponentInstance,
+    Converter, CustomComponentInstance,
     ScenarioData, ComponentOverrideRule, ScenarioProfile,
     TimeSeriesData,
+)
+from .component_templates import (
+    load_component_templates, write_component_templates_sheet,
 )
 
 _HDR_FILL  = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
@@ -117,14 +120,8 @@ def _write_network_sheets(wb, network: NetworkData):
                    ph.build_year, ph.lifetime])
     _style_ws(ws)
 
-    # ── Component templates (JSON in one cell) ──────────────────────
-    ws = wb.create_sheet("component_templates")
-    ws.append(["json_data"])
-    if network.component_templates:
-        ws.append([json.dumps(
-            [dataclasses.asdict(t) for t in network.component_templates],
-            ensure_ascii=False)])
-    _style_ws(ws)
+    # ── Component templates (人間が編集できる表形式) ────────────────
+    write_component_templates_sheet(wb, network.component_templates)
 
     # ── Custom component instances ──────────────────────────────────
     ws = wb.create_sheet("custom_instances")
@@ -404,22 +401,11 @@ def load_network(filepath: str) -> NetworkData:
         ))
 
     # ── Component templates ────────────────────────────────────────────
-    _templates: list = []
-    if "component_templates" in wb.sheetnames:
-        ws_t = wb["component_templates"]
-        rows_t = list(ws_t.iter_rows(min_row=2, values_only=True))
-        if rows_t and rows_t[0][0]:
-            try:
-                for td in json.loads(rows_t[0][0]):
-                    subs = [SubComponentDef(**s) for s in td.get("sub_components", [])]
-                    _templates.append(ComponentTemplate(
-                        name=td["name"],
-                        description=td.get("description", ""),
-                        sub_components=subs,
-                    ))
-            except Exception:
-                pass
-    network.component_templates = _templates
+    # 新フォーマット（表形式）・旧フォーマット（json_data 1セル）の両対応
+    try:
+        network.component_templates = load_component_templates(wb)
+    except Exception:
+        network.component_templates = []
 
     # ── Custom instances ────────────────────────────────────────────
     _custom_instances: list = []

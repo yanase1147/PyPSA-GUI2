@@ -1140,6 +1140,7 @@ def _safe(v):
 def _export_results_excel(results: OptimizationResults, path: str):
     import pandas as pd
     from openpyxl import Workbook
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
     wb = Workbook()
     ws_summary = wb.active
@@ -1190,6 +1191,6 @@ def _export_results_excel(results: OptimizationResults, path: str):
     # Log sheet
     ws_log = wb.create_sheet("log")
     for line in (results.log or "").splitlines():
-        ws_log.append([line])
+        ws_log.append([ILLEGAL_CHARACTERS_RE.sub("", line)])
 
     wb.save(path)

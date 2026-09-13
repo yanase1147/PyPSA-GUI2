@@ -380,25 +380,32 @@ class _LogBuffer(io.StringIO):
         self._full = full_log
         self._buf  = ""
 
+    def _clean_line(self, line: str) -> str | None:
+        """\r による上書きを解決し、ANSI コードを除去する。tqdm 進捗バー行は None を返す。"""
+        if "\r" in line:
+            line = line.rsplit("\r", 1)[-1]
+        plain = _ANSI_RE.sub("", line)
+        if _TQDM_RE.match(plain):
+            return None  # 進捗バー行は表示しない
+        return plain
+
     def write(self, s: str) -> int:
         self._buf += s
         while "\n" in self._buf:
             line, self._buf = self._buf.split("\n", 1)
-            # \r が含まれる場合は最後のセグメントのみ使用 (tqdm の上書き動作を模倣)
-            if "\r" in line:
-                line = line.rsplit("\r", 1)[-1]
-            # ANSI コードを除去してから tqdm 進捗バー行かどうか判定
-            plain = _ANSI_RE.sub("", line)
-            if _TQDM_RE.match(plain):
-                continue  # 進捗バー行は表示しない
+            line = self._clean_line(line)
+            if line is None:
+                continue
             self._emit(line)
             self._full.append(line)
         return len(s)
 
     def flush(self):
         if self._buf:
-            self._emit(self._buf)
-            self._full.append(self._buf)
+            line = self._clean_line(self._buf)
+            if line is not None:
+                self._emit(line)
+                self._full.append(line)
             self._buf = ""
 
 
